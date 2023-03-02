@@ -23,12 +23,17 @@ internal class NuGetHelper
 
 	internal ISettings NugetSettings { get; }
 
-	internal async Task<RestoreTargetGraph?> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, string projectPath, List<NuGetFramework> targetFrameworks, SourceCacheContext sourceCacheContext, CancellationToken cancellationToken)
+	internal async Task<RestoreTargetGraph?> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, IReadOnlyDictionary<string, string> centralPackageVersions, string projectPath, List<NuGetFramework> targetFrameworks, SourceCacheContext sourceCacheContext, CancellationToken cancellationToken)
 	{
 		// The package spec details what packages to restore
-		PackageSpec packageSpec = new PackageSpec(targetFrameworks.Select(i => new TargetFrameworkInformation
+		PackageSpec packageSpec = new PackageSpec(targetFrameworks.Select(i =>
 		{
-			FrameworkName = i,
+			var tfi = new TargetFrameworkInformation
+			{
+				FrameworkName = i,
+			};
+			tfi.CentralPackageVersions.AddRange(centralPackageVersions.Select(kv => new KeyValuePair<string, CentralPackageVersion>(kv.Key, new CentralPackageVersion(kv.Key, VersionRange.Parse(kv.Value)))));
+			return tfi;
 		}).ToList())
 		{
 			Dependencies = packages.Select(i => new LibraryDependency
@@ -47,6 +52,8 @@ internal class NuGetHelper
 				PackagesPath = SettingsUtility.GetGlobalPackagesFolder(this.NugetSettings),
 				Sources = SettingsUtility.GetEnabledSources(this.NugetSettings).ToList(),
 				FallbackFolders = SettingsUtility.GetFallbackPackageFolders(this.NugetSettings).ToList(),
+				CentralPackageVersionsEnabled = true,
+				TargetFrameworks = targetFrameworks.Select(tf => new ProjectRestoreMetadataFrameworkInfo(tf)).ToList(),
 			},
 			FilePath = projectPath,
 			Name = Path.GetFileNameWithoutExtension(projectPath),

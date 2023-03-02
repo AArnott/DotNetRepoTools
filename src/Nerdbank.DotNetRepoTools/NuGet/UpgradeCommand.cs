@@ -108,10 +108,11 @@ public class UpgradeCommand : CommandBase
 
 			this.Console.WriteLine("Looking for package downgrade issues...");
 			NuGetFramework nugetFramework = new(this.TargetFramework);
+			Dictionary<string, string> centralPackageVersions = packagesProps.GetItems(PackageVersionItemType).ToDictionary(i => i.EvaluatedInclude, i => i.GetMetadataValue("Version"));
 			List<PackageReference> packageReferences = packagesProps.GetItems(PackageVersionItemType).Select(pv => new PackageReference(new PackageIdentity(pv.EvaluatedInclude, NuGetVersion.Parse(pv.GetMetadataValue(VersionMetadata))), nugetFramework)).ToList();
 			List<NuGetFramework> targetFrameworks = new() { nugetFramework };
 			SourceCacheContext sourceCacheContext = new();
-			RestoreTargetGraph? restoreGraph = await nuget.GetRestoreTargetGraphAsync(packageReferences, this.DirectoryPackagesPropsPath, targetFrameworks, sourceCacheContext, this.CancellationToken);
+			RestoreTargetGraph? restoreGraph = await nuget.GetRestoreTargetGraphAsync(packageReferences, centralPackageVersions, this.DirectoryPackagesPropsPath, targetFrameworks, sourceCacheContext, this.CancellationToken);
 			Assumes.NotNull(restoreGraph);
 
 			bool fixesApplied = false;
