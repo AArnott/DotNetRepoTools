@@ -1,9 +1,16 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFrameworks>net6.0;netstandard2.0</TargetFrameworks>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-  </PropertyGroup>
-  <ItemGroup>
-    <None Include="$(RepoRootPath)README.md" Pack="true" PackagePath="" />
-  </ItemGroup>
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net7.0</TargetFramework>
+		<OutputType>exe</OutputType>
+		<ToolCommandName>repotools</ToolCommandName>
+		<PackAsTool>True</PackAsTool>
+		<Description>A CLI tool with commands to help maintain .NET codebases.</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+	<ItemGroup>
+		<None Include="$(RepoRootPath)README.md" Pack="true" PackagePath="" />
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="System.CommandLine" />
+	</ItemGroup>
 </Project>

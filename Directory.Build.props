@@ -29,7 +29,7 @@
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)strongname.snk</AssemblyOriginatorKeyFile>
 
-    <!-- <PackageProjectUrl>https://github.com/ORG/REPO</PackageProjectUrl> -->
+     <PackageProjectUrl>https://github.com/AArnott/DotNetRepoTools</PackageProjectUrl> 
     <Company>Andrew Arnott</Company>
     <Authors>Andrew Arnott</Authors>
     <Copyright>© Andrew Arnott. All rights reserved.</Copyright>
