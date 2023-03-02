@@ -8,6 +8,11 @@ namespace NuGet;
 
 public class UpgradeCommandTests : TestBase
 {
+	public UpgradeCommandTests(ITestOutputHelper logger)
+		: base(logger)
+	{
+	}
+
 	[Fact]
 	public async Task IncludesTransitiveDependencies()
 	{
@@ -16,6 +21,7 @@ public class UpgradeCommandTests : TestBase
 		{
 			PackageId = "Nerdbank.Streams",
 			PackageVersion = "2.9.112",
+			TargetFramework = "netstandard2.0",
 			DirectoryPackagesPropsPath = packagesPropsPath,
 		};
 
@@ -38,6 +44,7 @@ public class UpgradeCommandTests : TestBase
 	private async Task<Project> ExecuteAsync(UpgradeCommand command)
 	{
 		await command.ExecuteAsync();
+		this.DumpConsole(command.Console);
 
 		Project newPackagesProps = this.MSBuild.EvaluateProjectFile(command.DirectoryPackagesPropsPath);
 		AssertPackageVersion(newPackagesProps, command.PackageId, command.PackageVersion);

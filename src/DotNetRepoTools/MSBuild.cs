@@ -9,6 +9,11 @@ internal class MSBuild
 {
 	internal ProjectCollection ProjectCollection { get; } = new();
 
+	internal static ProjectItem? FindItem(Project project, string itemType, string include)
+	{
+		return project.GetItemsByEvaluatedInclude(include).FirstOrDefault(i => string.Equals(itemType, i.ItemType, StringComparison.OrdinalIgnoreCase));
+	}
+
 	internal Project EvaluateProjectFile(string projectFile)
 	{
 		return this.ProjectCollection.GetLoadedProjects(Path.GetFullPath(projectFile)).FirstOrDefault() ?? this.ProjectCollection.LoadProject(projectFile);

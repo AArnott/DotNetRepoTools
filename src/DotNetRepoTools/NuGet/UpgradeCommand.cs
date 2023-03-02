@@ -3,7 +3,17 @@
 
 using System.CommandLine;
 using System.CommandLine.Invocation;
+using System.CommandLine.IO;
+using Microsoft;
 using Microsoft.Build.Evaluation;
+using NuGet.Commands;
+using NuGet.Configuration;
+using NuGet.DependencyResolver;
+using NuGet.Frameworks;
+using NuGet.Packaging;
+using NuGet.Packaging.Core;
+using NuGet.Protocol.Core.Types;
+using NuGet.Versioning;
 
 namespace DotNetRepoTools.NuGet;
 
@@ -14,6 +24,7 @@ public class UpgradeCommand : CommandBase
 {
 	private const string DirectoryPackagesPropsFileName = "Directory.Packages.props";
 	private const string PackageVersionItemType = "PackageVersion";
+	private const string VersionMetadata = "Version";
 
 	private readonly MSBuild msbuild = new();
 
@@ -49,6 +60,11 @@ public class UpgradeCommand : CommandBase
 	required public string DirectoryPackagesPropsPath { get; init; }
 
 	/// <summary>
+	/// Gets the target framework used to evaluate package dependencies.
+	/// </summary>
+	required public string TargetFramework { get; init; }
+
+	/// <summary>
 	/// Creates the command.
 	/// </summary>
 	/// <returns>The command.</returns>
@@ -57,6 +73,7 @@ public class UpgradeCommand : CommandBase
 		Argument<string> packageIdArgument = new Argument<string>("id", "The ID of the root package to be upgraded.");
 		Argument<string> packageVersionArgument = new Argument<string>("version", "The version to upgrade to.");
 		Option<FileInfo> pathOption = new Option<FileInfo>("--path", "The path to the Directory.Packages.props file to update.") { IsRequired = !File.Exists(DirectoryPackagesPropsFileName) }.ExistingOnly();
+		Option<string> frameworkOption = new Option<string>("--framework", () => "netstandard2.0", "The target framework used to evaluate package dependencies.");
 
 		Command command = new("upgrade", "Upgrade a package dependency, and all transitive dependencies such that no package downgrade warnings occur.")
 		{
@@ -68,25 +85,75 @@ public class UpgradeCommand : CommandBase
 		{
 			PackageId = ctxt.ParseResult.GetValueForArgument(packageIdArgument),
 			PackageVersion = ctxt.ParseResult.GetValueForArgument(packageVersionArgument),
-			DirectoryPackagesPropsPath = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? throw new Exception("Missing option"),
+			DirectoryPackagesPropsPath = ctxt.ParseResult.GetValueForOption(pathOption)!.FullName,
+			TargetFramework = ctxt.ParseResult.GetValueForOption(frameworkOption)!,
 		}.ExecuteAsync());
 
 		return command;
 	}
 
 	/// <inheritdoc/>
-	protected override Task ExecuteCoreAsync()
+	protected override async Task ExecuteCoreAsync()
 	{
+		string? repoRootPath = Path.GetDirectoryName(this.DirectoryPackagesPropsPath);
+		NuGetHelper nuget = new(Settings.LoadDefaultSettings(repoRootPath));
 		Project packagesProps = this.msbuild.EvaluateProjectFile(this.DirectoryPackagesPropsPath);
+		int versionsUpdated = 0;
 
-		ICollection<ProjectItem> packageVersionItems = packagesProps.GetItems(PackageVersionItemType);
-		ProjectItem? packageVersionTargetItem = packageVersionItems.FirstOrDefault(i => string.Equals(i.EvaluatedInclude, this.PackageId, StringComparison.OrdinalIgnoreCase));
-		if (packageVersionTargetItem is not null)
+		SetPackageVersion(this.PackageId, this.PackageVersion);
+
+		while (true)
 		{
-			packageVersionTargetItem.SetMetadataValue("Version", this.PackageVersion);
+			this.CancellationToken.ThrowIfCancellationRequested();
+
+			this.Console.WriteLine("Looking for package downgrade issues...");
+			NuGetFramework nugetFramework = new(this.TargetFramework);
+			List<PackageReference> packageReferences = packagesProps.GetItems(PackageVersionItemType).Select(pv => new PackageReference(new PackageIdentity(pv.EvaluatedInclude, NuGetVersion.Parse(pv.GetMetadataValue(VersionMetadata))), nugetFramework)).ToList();
+			List<NuGetFramework> targetFrameworks = new() { nugetFramework };
+			SourceCacheContext sourceCacheContext = new();
+			RestoreTargetGraph? restoreGraph = await nuget.GetRestoreTargetGraphAsync(packageReferences, this.DirectoryPackagesPropsPath, targetFrameworks, sourceCacheContext, this.CancellationToken);
+			Assumes.NotNull(restoreGraph);
+
+			bool fixesApplied = false;
+			foreach (DowngradeResult<RemoteResolveResult> conflict in restoreGraph.AnalyzeResult.Downgrades)
+			{
+				this.Console.Error.WriteLine($"{conflict}");
+				////SetPackageVersion(conflict.DowngradedFrom.)
+				fixesApplied = true;
+			}
+
+			if (fixesApplied)
+			{
+				// Loop around again and see how we fare.
+				continue;
+			}
+
+			break;
 		}
 
+		this.Console.WriteLine($"All done. {versionsUpdated} package versions were updated.");
 		packagesProps.Save();
-		return Task.CompletedTask;
+
+		void SetPackageVersion(string id, string version)
+		{
+			ProjectItem? item = MSBuild.FindItem(packagesProps, PackageVersionItemType, id);
+			if (item is null)
+			{
+				item = packagesProps.AddItem(PackageVersionItemType, id).First();
+			}
+
+			string? oldVersion = item.GetMetadataValue(VersionMetadata);
+			item.SetMetadataValue(VersionMetadata, version);
+			if (oldVersion is null)
+			{
+				versionsUpdated++;
+				this.Console.WriteLine($"{id} {version}");
+			}
+			else if (oldVersion != version)
+			{
+				versionsUpdated++;
+				this.Console.WriteLine($"{id} {oldVersion} -> {version}");
+			}
+		}
 	}
 }

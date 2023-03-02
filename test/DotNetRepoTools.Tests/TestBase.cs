@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System.CommandLine;
 using System.Reflection;
 
 public abstract class TestBase : IDisposable
@@ -8,13 +9,16 @@ public abstract class TestBase : IDisposable
 	private readonly List<string> tempFiles = new();
 	private readonly List<string> tempDirectories = new();
 
-	public TestBase()
+	public TestBase(ITestOutputHelper logger)
 	{
+		this.Logger = logger;
 		this.StagingDirectory = Path.Combine(Path.GetTempPath(), "test_" + Path.GetRandomFileName());
 		this.RegisterTemporaryDirectory(this.StagingDirectory);
 	}
 
 	public string StagingDirectory { get; }
+
+	public ITestOutputHelper Logger { get; }
 
 	internal MSBuild MSBuild { get; } = new();
 
@@ -28,6 +32,21 @@ public abstract class TestBase : IDisposable
 	{
 		return Assembly.GetExecutingAssembly().GetManifestResourceStream($"Assets.{assetName.Replace('/', '.')}")
 			?? throw new ArgumentException($"No resource named {assetName} found under the Assets directory of the test project.");
+	}
+
+	protected void DumpConsole(IConsole console)
+	{
+		if (console.Out.ToString() is { Length: > 0 } stdout)
+		{
+			this.Logger.WriteLine("Command STDOUT:");
+			this.Logger.WriteLine(stdout);
+		}
+
+		if (console.Error.ToString() is { Length: > 0 } stderr)
+		{
+			this.Logger.WriteLine("Command STDERR:");
+			this.Logger.WriteLine(stderr);
+		}
 	}
 
 	protected async Task<string> PlaceAssetAsync(string assetName, string? baseDirectory = null, CancellationToken cancellationToken = default)

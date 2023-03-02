@@ -45,7 +45,7 @@ public abstract class CommandBase
 	/// <summary>
 	/// Gets the console to interact with during execution of the command.
 	/// </summary>
-	protected IConsole Console { get; init; } = new TestConsole();
+	public IConsole Console { get; init; } = new TestConsole();
 
 	/// <summary>
 	/// Gets the command line invocation context, when available.

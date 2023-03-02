@@ -16,9 +16,14 @@ namespace DotNetRepoTools.NuGet;
 
 internal class NuGetHelper
 {
-	required internal ISettings NugetSettings { get; init; }
+	internal NuGetHelper(ISettings settings)
+	{
+		this.NugetSettings = settings;
+	}
 
-	private async Task<RestoreTargetGraph?> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, string projectPath, List<NuGetFramework> targetFrameworks, SourceCacheContext sourceCacheContext)
+	internal ISettings NugetSettings { get; }
+
+	internal async Task<RestoreTargetGraph?> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, string projectPath, List<NuGetFramework> targetFrameworks, SourceCacheContext sourceCacheContext, CancellationToken cancellationToken)
 	{
 		// The package spec details what packages to restore
 		PackageSpec packageSpec = new PackageSpec(targetFrameworks.Select(i => new TargetFrameworkInformation
@@ -63,8 +68,11 @@ internal class NuGetHelper
 			Log = NullLogger.Instance,
 		};
 
+		cancellationToken.ThrowIfCancellationRequested();
+
 		// Create requests from the arguments
 		IReadOnlyList<RestoreSummaryRequest> requests = await requestProvider.CreateRequests(restoreArgs);
+		cancellationToken.ThrowIfCancellationRequested();
 
 		// Restore the package without generating extra files
 		RestoreResultPair? restoreResult = (await RestoreRunner.RunWithoutCommit(requests, restoreArgs)).FirstOrDefault();
