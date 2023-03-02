@@ -3,7 +3,7 @@
 
 using System.CommandLine;
 
-namespace DotNetRepoTools.NuGet;
+namespace Nerdbank.DotNetRepoTools.NuGet;
 
 /// <summary>
 /// Aggregates the NuGet sub-commands.

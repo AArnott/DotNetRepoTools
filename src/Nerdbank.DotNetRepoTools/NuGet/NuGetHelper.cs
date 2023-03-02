@@ -12,7 +12,7 @@ using NuGet.Protocol;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
-namespace DotNetRepoTools.NuGet;
+namespace Nerdbank.DotNetRepoTools.NuGet;
 
 internal class NuGetHelper
 {

@@ -4,9 +4,9 @@
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Parsing;
-using DotNetRepoTools.NuGet;
+using Nerdbank.DotNetRepoTools.NuGet;
 
-namespace DotNetRepoTools;
+namespace Nerdbank.DotNetRepoTools;
 
 /// <summary>
 /// Executable entrypoint.

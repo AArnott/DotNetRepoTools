@@ -5,7 +5,7 @@ using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.IO;
 
-namespace DotNetRepoTools;
+namespace Nerdbank.DotNetRepoTools;
 
 /// <summary>
 /// A base class for commands.

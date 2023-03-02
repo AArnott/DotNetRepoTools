@@ -15,7 +15,7 @@ using NuGet.Packaging.Core;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
-namespace DotNetRepoTools.NuGet;
+namespace Nerdbank.DotNetRepoTools.NuGet;
 
 /// <summary>
 /// Defines and implements the nuget upgrade command.

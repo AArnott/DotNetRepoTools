@@ -4,7 +4,7 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 
-namespace DotNetRepoTools.NuGet;
+namespace Nerdbank.DotNetRepoTools.NuGet;
 
 internal class TrimCommand : CommandBase
 {

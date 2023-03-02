@@ -3,7 +3,7 @@
 
 using Microsoft.Build.Evaluation;
 
-namespace DotNetRepoTools;
+namespace Nerdbank.DotNetRepoTools;
 
 internal class MSBuild
 {

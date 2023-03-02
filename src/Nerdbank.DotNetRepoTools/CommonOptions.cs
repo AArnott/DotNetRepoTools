@@ -3,7 +3,7 @@
 
 using System.CommandLine;
 
-namespace DotNetRepoTools;
+namespace Nerdbank.DotNetRepoTools;
 
 internal static class CommonOptions
 {

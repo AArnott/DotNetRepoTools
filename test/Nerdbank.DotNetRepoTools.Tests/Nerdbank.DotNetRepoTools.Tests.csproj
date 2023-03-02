@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\DotNetRepoTools\DotNetRepoTools.csproj" />
+    <ProjectReference Include="..\..\src\Nerdbank.DotNetRepoTools\Nerdbank.DotNetRepoTools.csproj" />
   </ItemGroup>
 
   <ItemGroup>
