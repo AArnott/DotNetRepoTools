@@ -13,6 +13,7 @@ namespace DotNetRepoTools.NuGet;
 public class UpgradeCommand : CommandBase
 {
 	private const string DirectoryPackagesPropsFileName = "Directory.Packages.props";
+	private const string PackageVersionItemType = "PackageVersion";
 
 	private readonly MSBuild msbuild = new();
 
@@ -77,6 +78,15 @@ public class UpgradeCommand : CommandBase
 	protected override Task ExecuteCoreAsync()
 	{
 		Project packagesProps = this.msbuild.EvaluateProjectFile(this.DirectoryPackagesPropsPath);
+
+		ICollection<ProjectItem> packageVersionItems = packagesProps.GetItems(PackageVersionItemType);
+		ProjectItem? packageVersionTargetItem = packageVersionItems.FirstOrDefault(i => string.Equals(i.EvaluatedInclude, this.PackageId, StringComparison.OrdinalIgnoreCase));
+		if (packageVersionTargetItem is not null)
+		{
+			packageVersionTargetItem.SetMetadataValue("Version", this.PackageVersion);
+		}
+
+		packagesProps.Save();
 		return Task.CompletedTask;
 	}
 }

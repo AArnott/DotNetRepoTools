@@ -25,7 +25,14 @@ public class UpgradeCommandTests : TestBase
 
 	private static void AssertPackageVersion(Project project, string id, string version)
 	{
-		Assert.Equal(version, MSBuild.FindItem(project, "PackageVersion", id)?.GetMetadataValue("Version"));
+		try
+		{
+			Assert.Equal(version, MSBuild.FindItem(project, "PackageVersion", id)?.GetMetadataValue("Version"));
+		}
+		catch (Exception ex)
+		{
+			throw new Exception($"Failure while asserting version for package '{id}'.", ex);
+		}
 	}
 
 	private async Task<Project> ExecuteAsync(UpgradeCommand command)
