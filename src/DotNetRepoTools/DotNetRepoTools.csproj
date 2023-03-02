@@ -11,6 +11,8 @@
 		<None Include="$(RepoRootPath)README.md" Pack="true" PackagePath="" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="System.CommandLine" />
+		<PackageReference Include="Microsoft.Build" PrivateAssets="compile" />
+		<PackageReference Include="NuGet.Commands" PrivateAssets="compile" />
+		<PackageReference Include="System.CommandLine" PrivateAssets="all" />
 	</ItemGroup>
 </Project>

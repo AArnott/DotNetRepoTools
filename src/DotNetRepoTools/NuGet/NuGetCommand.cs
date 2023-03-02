@@ -18,7 +18,7 @@ internal class NuGetCommand
 	{
 		Command nuget = new("nuget", "NuGet maintenance commands")
 		{
-			NuGetUpgradeCommand.CreateCommand(),
+			UpgradeCommand.CreateCommand(),
 		};
 
 		return nuget;

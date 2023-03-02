@@ -1,0 +1,6 @@
+<Project>
+  <ItemGroup>
+    <PackageVersion Include="Nerdbank.Streams" Version="2.0.214" />
+    <PackageVersion Include="System.IO.Pipelines" Version="4.5.3" />
+  </ItemGroup>
+</Project>
