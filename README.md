@@ -15,18 +15,18 @@ Install or upgrade this tool with the following command:
 
 ## Commands
 
-After install, use the tool name `repotools` to run commands.
+After install, use the tool name `repo` to run commands.
 
 This CLI tool has (or will have) a variety of commands and sub-commands, discoverable using the `-h` switch to discover commands, sub-commands, and switches.
 
 ```
-$ repotools -?
+$ repo -?
 
 Description:
   A CLI tool with commands to help maintain .NET codebases.
 
 Usage:
-  repotools [command] [options]
+  repo [command] [options]
 
 Options:
   --version       Show version information
@@ -39,13 +39,13 @@ Commands:
 You can then drill in to reveal sub-commands:
 
 ```
-$ repotools nuget -?
+$ repo nuget -?
 
 Description:
   NuGet maintenance commands
 
 Usage:
-  repotools nuget [command] [options]
+  repo nuget [command] [options]
 
 Options:
   -?, -h, --help  Show help and usage information
@@ -61,4 +61,4 @@ For example, the following command will upgrade the repo's Directory.Packages.pr
 and update all transitive dependencies that also have versions specified in that file, so that you do not have to manually upgrade those versions
 to resolve package downgrade errors:
 
-    repotools nuget upgrade StreamJsonRpc 1.2.3
+    repo nuget upgrade StreamJsonRpc 1.2.3

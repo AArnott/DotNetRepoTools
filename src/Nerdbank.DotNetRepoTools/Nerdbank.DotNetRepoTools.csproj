@@ -2,7 +2,7 @@
 	<PropertyGroup>
 		<TargetFramework>net7.0</TargetFramework>
 		<OutputType>exe</OutputType>
-		<ToolCommandName>repotools</ToolCommandName>
+		<ToolCommandName>repo</ToolCommandName>
 		<PackAsTool>True</PackAsTool>
 		<Description>A CLI tool with commands to help maintain .NET codebases.</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
