@@ -7,21 +7,20 @@ using Microsoft.Build.Evaluation;
 
 public abstract class TestBase : IAsyncLifetime
 {
-	private readonly List<string> tempFiles = new();
-	private readonly List<string> tempDirectories = new();
-
 	public TestBase(ITestOutputHelper logger)
 	{
 		this.Logger = logger;
 		this.StagingDirectory = Path.Combine(Path.GetTempPath(), "test_" + Path.GetRandomFileName());
-		this.RegisterTemporaryDirectory(this.StagingDirectory);
+		this.TempFiles.Add(this.StagingDirectory);
 	}
 
 	public string StagingDirectory { get; }
 
 	public ITestOutputHelper Logger { get; }
 
-	internal MSBuild MSBuild { get; } = new();
+	internal MSBuild MSBuild { get; } = new() { SaveOnDisposal = false };
+
+	internal TempFileCollection TempFiles { get; } = new();
 
 	public virtual Task InitializeAsync()
 	{
@@ -30,16 +29,8 @@ public abstract class TestBase : IAsyncLifetime
 
 	public virtual Task DisposeAsync()
 	{
-		foreach (string file in this.tempFiles)
-		{
-			File.Delete(file);
-		}
-
-		foreach (string dir in this.tempDirectories)
-		{
-			Directory.Delete(dir, recursive: true);
-		}
-
+		this.TempFiles.Dispose();
+		this.MSBuild.Dispose();
 		return Task.CompletedTask;
 	}
 
@@ -76,6 +67,11 @@ public abstract class TestBase : IAsyncLifetime
 		}
 	}
 
+	protected Project SynthesizeMSBuildAsset(string assetName)
+	{
+		return this.MSBuild.SynthesizeVolatileProject(Path.Combine(this.StagingDirectory, assetName), GetAsset(assetName));
+	}
+
 	protected async Task<string> PlaceAssetAsync(string assetName, string? baseDirectory = null, CancellationToken cancellationToken = default)
 	{
 		baseDirectory ??= this.StagingDirectory;
@@ -88,13 +84,9 @@ public abstract class TestBase : IAsyncLifetime
 
 		using Stream assetStream = GetAsset(assetName);
 		using FileStream targetFile = File.Create(targetFilePath);
-		this.RegisterTemporaryFile(targetFilePath);
+		this.TempFiles.Add(targetFilePath);
 		await assetStream.CopyToAsync(targetFile, cancellationToken);
 
 		return targetFilePath;
 	}
-
-	protected void RegisterTemporaryFile(string path) => this.tempFiles.Add(path);
-
-	protected void RegisterTemporaryDirectory(string path) => this.tempDirectories.Add(path);
 }

@@ -9,7 +9,7 @@ namespace NuGet;
 
 public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 {
-	private string packagesPropsPath = null!;
+	private Project packagesProps = null!;
 
 	public UpgradeCommandTests(ITestOutputHelper logger)
 		: base(logger)
@@ -20,7 +20,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 	{
 		await base.InitializeAsync();
 
-		this.packagesPropsPath = await this.PlaceAssetAsync("Directory.Packages.props");
+		this.packagesProps = this.SynthesizeMSBuildAsset("Directory.Packages.props");
 	}
 
 	[Fact]
@@ -31,7 +31,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 			PackageId = "Nerdbank.Streams",
 			PackageVersion = "2.9.112",
 			TargetFramework = "netstandard2.0",
-			DirectoryPackagesPropsPath = this.packagesPropsPath,
+			DirectoryPackagesPropsPath = this.packagesProps.FullPath,
 		};
 
 		Project newPackagesProps = await this.ExecuteAsync();
@@ -43,14 +43,14 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 	{
 		// As a test sanity check, ensure the package we're updating doesn't even appear, since we're testing that we can update transitive dependencies
 		// via a meta-package that isn't referenced.
-		Assert.Null(MSBuild.FindItem(this.MSBuild.EvaluateProjectFile(this.packagesPropsPath), "PackageVersion", "StreamJsonRpc"));
+		Assert.Null(MSBuild.FindItem(this.packagesProps, "PackageVersion", "StreamJsonRpc"));
 
 		this.Command = new()
 		{
 			PackageId = "StreamJsonRpc",
 			PackageVersion = "2.13.33",
 			TargetFramework = "netstandard2.0",
-			DirectoryPackagesPropsPath = this.packagesPropsPath,
+			DirectoryPackagesPropsPath = this.packagesProps.FullPath,
 		};
 
 		Project newPackagesProps = await this.ExecuteAsync();
@@ -66,7 +66,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 			PackageId = "StreamJsonRpc",
 			PackageVersion = "2.13.33",
 			TargetFramework = "netstandard2.0",
-			DirectoryPackagesPropsPath = this.packagesPropsPath,
+			DirectoryPackagesPropsPath = this.packagesProps.FullPath,
 			Explode = true,
 		};
 
@@ -80,35 +80,31 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 	public async Task ExplodeTransitiveDependencies_DoesNotDowngradeAnything()
 	{
 		// Introduce a downgrade issue.
-		Project newPackagesProps = this.MSBuild.EvaluateProjectFile(this.packagesPropsPath);
-		newPackagesProps.AddItem("PackageVersion", "Newtonsoft.Json").Single().SetMetadataValue("Version", "13.0.2");
-		newPackagesProps.Save();
+		this.packagesProps.AddItem("PackageVersion", "Newtonsoft.Json").Single().SetMetadataValue("Version", "13.0.2");
 
 		this.Command = new()
 		{
 			PackageId = "StreamJsonRpc",
 			PackageVersion = "2.13.33",
 			TargetFramework = "netstandard2.0",
-			DirectoryPackagesPropsPath = this.packagesPropsPath,
+			DirectoryPackagesPropsPath = this.packagesProps.FullPath,
 			Explode = true,
 		};
 
-		this.MSBuild.CloseAll();
-		newPackagesProps = await this.ExecuteAsync();
-		AssertPackageVersion(newPackagesProps, "StreamJsonRpc", "2.13.33");
-		AssertPackageVersion(newPackagesProps, "Newtonsoft.Json", "13.0.2");
+		this.packagesProps = await this.ExecuteAsync();
+		AssertPackageVersion(this.packagesProps, "StreamJsonRpc", "2.13.33");
+		AssertPackageVersion(this.packagesProps, "Newtonsoft.Json", "13.0.2");
 	}
 
 	private async Task<Project> ExecuteAsync()
 	{
 		Verify.Operation(this.Command is not null, $"Set {nameof(this.Command)} first.");
-		Project newPackagesProps = this.MSBuild.EvaluateProjectFile(this.Command.DirectoryPackagesPropsPath);
+		Project newPackagesProps = this.MSBuild.GetProject(this.Command.DirectoryPackagesPropsPath);
 		bool topLevelItemDefined = MSBuild.FindItem(newPackagesProps, "PackageVersion", this.Command.PackageId) is not null;
 
 		await this.Command.ExecuteAsync();
 
-		this.MSBuild.CloseAll();
-		newPackagesProps = this.MSBuild.EvaluateProjectFile(this.Command.DirectoryPackagesPropsPath);
+		newPackagesProps = this.MSBuild.GetProject(this.Command.DirectoryPackagesPropsPath);
 
 		// Assert that the package version itself was updated, if it existed previously.
 		// If it did not exist previously, we should *not* have added it.

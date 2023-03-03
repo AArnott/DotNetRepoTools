@@ -10,7 +10,7 @@ namespace Nerdbank.DotNetRepoTools;
 /// <summary>
 /// A base class for commands.
 /// </summary>
-public abstract class CommandBase
+public abstract class CommandBase : IDisposable
 {
 	/// <summary>
 	/// Initializes a new instance of the <see cref="CommandBase"/> class
@@ -80,9 +80,25 @@ public abstract class CommandBase
 		}
 	}
 
+	/// <inheritdoc/>
+	public void Dispose()
+	{
+		// Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+		this.Dispose(disposing: true);
+		GC.SuppressFinalize(this);
+	}
+
 	/// <summary>
 	/// Implements the actual command implementation.
 	/// </summary>
 	/// <returns>A task that tracks command completion.</returns>
 	protected abstract Task ExecuteCoreAsync();
+
+	/// <summary>
+	/// Disposes of managed and/or unmanaged resources owned by this instance.
+	/// </summary>
+	/// <param name="disposing"><see langword="true" /> if the object is being disposed; <see langword="false" /> if it is being finalized.</param>
+	protected virtual void Dispose(bool disposing)
+	{
+	}
 }

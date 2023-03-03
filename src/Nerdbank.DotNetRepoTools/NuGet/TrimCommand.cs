@@ -6,7 +6,7 @@ using System.CommandLine.Invocation;
 
 namespace Nerdbank.DotNetRepoTools.NuGet;
 
-internal class TrimCommand : CommandBase
+internal class TrimCommand : MSBuildCommandBase
 {
 	public TrimCommand()
 	{

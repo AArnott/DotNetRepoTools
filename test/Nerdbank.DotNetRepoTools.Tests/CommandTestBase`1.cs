@@ -4,12 +4,25 @@
 public abstract class CommandTestBase<TCommand> : TestBase
 	where TCommand : CommandBase
 {
+	private TCommand? command;
+
 	protected CommandTestBase(ITestOutputHelper logger)
 		: base(logger)
 	{
 	}
 
-	protected TCommand? Command { get; set; }
+	protected TCommand? Command
+	{
+		get => this.command;
+		set
+		{
+			this.command = value;
+			if (value is MSBuildCommandBase msbuildCommand)
+			{
+				msbuildCommand.MSBuild = this.MSBuild;
+			}
+		}
+	}
 
 	public override Task DisposeAsync()
 	{

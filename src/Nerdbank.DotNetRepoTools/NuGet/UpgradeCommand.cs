@@ -15,11 +15,9 @@ namespace Nerdbank.DotNetRepoTools.NuGet;
 /// <summary>
 /// Defines and implements the nuget upgrade command.
 /// </summary>
-public class UpgradeCommand : CommandBase
+public class UpgradeCommand : MSBuildCommandBase
 {
 	private const string DirectoryPackagesPropsFileName = "Directory.Packages.props";
-
-	private readonly MSBuild msbuild = new();
 
 	/// <summary>
 	/// Initializes a new instance of the <see cref="UpgradeCommand"/> class.
@@ -97,7 +95,7 @@ public class UpgradeCommand : CommandBase
 	/// <inheritdoc/>
 	protected override async Task ExecuteCoreAsync()
 	{
-		Project packagesProps = this.msbuild.EvaluateProjectFile(this.DirectoryPackagesPropsPath);
+		Project packagesProps = this.MSBuild.GetProject(this.DirectoryPackagesPropsPath);
 		NuGetHelper nuget = new(this.Console, packagesProps);
 		int versionsUpdated = 1;
 
@@ -126,6 +124,5 @@ public class UpgradeCommand : CommandBase
 		}
 
 		this.Console.WriteLine($"All done. {versionsUpdated} package versions were updated.");
-		packagesProps.Save();
 	}
 }

@@ -11,10 +11,8 @@ namespace Nerdbank.DotNetRepoTools.NuGet;
 /// <summary>
 /// Resolves package downgrade warnings for a project.
 /// </summary>
-public class ReconcileVersionsCommand : CommandBase
+public class ReconcileVersionsCommand : MSBuildCommandBase
 {
-	private readonly MSBuild msbuild = new();
-
 	/// <summary>
 	/// Initializes a new instance of the <see cref="ReconcileVersionsCommand"/> class.
 	/// </summary>
@@ -67,12 +65,11 @@ public class ReconcileVersionsCommand : CommandBase
 	/// <inheritdoc/>
 	protected override async Task ExecuteCoreAsync()
 	{
-		Project project = this.msbuild.EvaluateProjectFile(this.ProjectPath);
+		Project project = this.MSBuild.GetProject(this.ProjectPath);
 		NuGetHelper nuget = new(this.Console, project);
 
 		NuGetFramework nugetFramework = NuGetFramework.Parse(this.TargetFramework);
 		int versionsUpdated = await nuget.CorrectDowngradeIssuesAsync(nugetFramework, null, this.CancellationToken);
 		this.Console.WriteLine($"All done. {versionsUpdated} package versions were updated.");
-		project.Save();
 	}
 }
