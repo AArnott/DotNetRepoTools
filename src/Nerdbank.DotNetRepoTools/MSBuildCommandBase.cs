@@ -13,6 +13,11 @@ public abstract class MSBuildCommandBase : CommandBase
 	private bool msbuildOwned = true;
 	private MSBuild msbuild = new();
 
+	static MSBuildCommandBase()
+	{
+		MSBuild.MSBuildLocator.EnsureLoaded();
+	}
+
 	/// <summary>
 	/// Initializes a new instance of the <see cref="MSBuildCommandBase"/> class.
 	/// </summary>

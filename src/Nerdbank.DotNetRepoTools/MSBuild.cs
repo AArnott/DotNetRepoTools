@@ -47,7 +47,7 @@ public class MSBuild : IDisposable
 	{
 		foreach (ProjectRootElement pre in this.EnumerateLoadedXml())
 		{
-			if (pre.HasUnsavedChanges)
+			if (pre.HasUnsavedChanges && !string.Equals(Path.GetFileName(pre.FullPath), "repotools.csproj", StringComparison.OrdinalIgnoreCase))
 			{
 				pre.Save();
 			}

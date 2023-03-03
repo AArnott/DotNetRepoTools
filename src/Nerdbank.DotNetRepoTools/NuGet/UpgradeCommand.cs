@@ -68,7 +68,7 @@ public class UpgradeCommand : MSBuildCommandBase
 	{
 		Argument<string> packageIdArgument = new Argument<string>("id", "The ID of the root package to be upgraded.");
 		Argument<string> packageVersionArgument = new Argument<string>("version", "The version to upgrade to.");
-		Option<FileInfo> pathOption = new Option<FileInfo>("--path", "The path to the project or repo to upgrade.") { IsRequired = !File.Exists(DirectoryPackagesPropsFileName) }.ExistingOnly();
+		Option<FileSystemInfo> pathOption = new Option<FileSystemInfo>("--path", "The path to the project or repo to upgrade.") { IsRequired = !File.Exists(DirectoryPackagesPropsFileName) }.ExistingOnly();
 		Option<string> frameworkOption = new Option<string>("--framework", () => "netstandard2.0", "The target framework used to evaluate package dependencies.");
 		Option<bool> explodeOption = new("--explode", "Add PackageVersion items for every transitive dependency, so that they can be added as direct project dependencies as versions are pre-specified.");
 
