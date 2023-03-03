@@ -44,17 +44,17 @@ public class ReconcileVersionsCommand : MSBuildCommandBase
 	/// <returns>The command.</returns>
 	internal static Command CreateCommand()
 	{
-		Argument<FileInfo> projectArgument = new Argument<FileInfo>("project", "The path to the project or repo to resolve version issues with.").ExistingOnly();
+		Option<FileSystemInfo> pathOption = new Option<FileSystemInfo>("--path", "The path to the project or repo to resolve version issues with.").ExistingOnly();
 		Option<string> frameworkOption = new Option<string>("--framework", () => "netstandard2.0", "The target framework used to evaluate package dependencies.");
 
 		Command command = new("reconcile-versions", "Resolves all package downgrade warnings.")
 		{
-			projectArgument,
+			pathOption,
 			frameworkOption,
 		};
 		command.SetHandler(ctxt => new ReconcileVersionsCommand(ctxt)
 		{
-			ProjectPath = ctxt.ParseResult.GetValueForArgument(projectArgument).FullName,
+			ProjectPath = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Environment.CurrentDirectory,
 			TargetFramework = ctxt.ParseResult.GetValueForOption(frameworkOption)!,
 		}.ExecuteAndDisposeAsync());
 

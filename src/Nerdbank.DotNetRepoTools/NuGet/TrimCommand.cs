@@ -25,14 +25,14 @@ internal class TrimCommand : MSBuildCommandBase
 	/// <returns>The command.</returns>
 	internal static Command CreateCommand()
 	{
-		Argument<FileInfo> projectArgument = new Argument<FileInfo>("project", "The path to the project file with the PackageReference items to trim.").ExistingOnly();
+		Option<FileInfo> pathOption = new Option<FileInfo>("--path", "The path to the project file with the PackageReference items to trim.").ExistingOnly();
 		Command command = new("trim", "Removes PackageReference items that are redundant because they are to packages that already appear as transitive dependencies.")
 		{
-			projectArgument,
+			pathOption,
 		};
 		command.SetHandler(ctxt => new TrimCommand(ctxt)
 		{
-			Project = ctxt.ParseResult.GetValueForArgument(projectArgument).FullName,
+			Project = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Environment.CurrentDirectory,
 		}.ExecuteAndDisposeAsync());
 
 		return command;

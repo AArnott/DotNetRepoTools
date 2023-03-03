@@ -84,7 +84,7 @@ public class UpgradeCommand : MSBuildCommandBase
 		{
 			PackageId = ctxt.ParseResult.GetValueForArgument(packageIdArgument),
 			PackageVersion = ctxt.ParseResult.GetValueForArgument(packageVersionArgument),
-			Path = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? System.IO.Path.GetFullPath(DirectoryPackagesPropsFileName),
+			Path = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Environment.CurrentDirectory,
 			TargetFramework = ctxt.ParseResult.GetValueForOption(frameworkOption)!,
 			Explode = ctxt.ParseResult.GetValueForOption(explodeOption),
 		}.ExecuteAndDisposeAsync());
