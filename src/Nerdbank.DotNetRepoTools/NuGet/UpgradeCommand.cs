@@ -107,19 +107,20 @@ public class UpgradeCommand : CommandBase
 			this.CancellationToken.ThrowIfCancellationRequested();
 
 			this.Console.WriteLine("Looking for package downgrade issues...");
-			NuGetFramework nugetFramework = new(this.TargetFramework);
-			Dictionary<string, string> centralPackageVersions = packagesProps.GetItems(PackageVersionItemType).ToDictionary(i => i.EvaluatedInclude, i => i.GetMetadataValue("Version"));
+			NuGetFramework nugetFramework = NuGetFramework.Parse(this.TargetFramework);
 			List<PackageReference> packageReferences = packagesProps.GetItems(PackageVersionItemType).Select(pv => new PackageReference(new PackageIdentity(pv.EvaluatedInclude, NuGetVersion.Parse(pv.GetMetadataValue(VersionMetadata))), nugetFramework)).ToList();
 			List<NuGetFramework> targetFrameworks = new() { nugetFramework };
-			SourceCacheContext sourceCacheContext = new();
-			RestoreTargetGraph? restoreGraph = await nuget.GetRestoreTargetGraphAsync(packageReferences, centralPackageVersions, this.DirectoryPackagesPropsPath, targetFrameworks, sourceCacheContext, this.CancellationToken);
+			SourceCacheContext sourceCacheContext = new()
+			{
+				IgnoreFailedSources = true,
+			};
+			RestoreTargetGraph? restoreGraph = await nuget.GetRestoreTargetGraphAsync(packageReferences, this.DirectoryPackagesPropsPath, targetFrameworks, sourceCacheContext, this.CancellationToken);
 			Assumes.NotNull(restoreGraph);
 
 			bool fixesApplied = false;
 			foreach (DowngradeResult<RemoteResolveResult> conflict in restoreGraph.AnalyzeResult.Downgrades)
 			{
-				this.Console.Error.WriteLine($"{conflict}");
-				////SetPackageVersion(conflict.DowngradedFrom.)
+				SetPackageVersion(conflict.DowngradedFrom.Key.Name, conflict.DowngradedFrom.Key.VersionRange.OriginalString);
 				fixesApplied = true;
 			}
 

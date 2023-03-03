@@ -18,21 +18,20 @@ internal class NuGetHelper
 {
 	internal NuGetHelper(ISettings settings)
 	{
-		this.NugetSettings = settings;
+		this.Settings = settings;
 	}
 
-	internal ISettings NugetSettings { get; }
+	internal ISettings Settings { get; }
 
-	internal async Task<RestoreTargetGraph?> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, IReadOnlyDictionary<string, string> centralPackageVersions, string projectPath, List<NuGetFramework> targetFrameworks, SourceCacheContext sourceCacheContext, CancellationToken cancellationToken)
+	internal async Task<RestoreTargetGraph?> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, string projectPath, List<NuGetFramework> targetFrameworks, SourceCacheContext sourceCacheContext, CancellationToken cancellationToken)
 	{
 		// The package spec details what packages to restore
-		PackageSpec packageSpec = new PackageSpec(targetFrameworks.Select(i =>
+		PackageSpec packageSpec = new PackageSpec(targetFrameworks.Select(targetFramework =>
 		{
 			var tfi = new TargetFrameworkInformation
 			{
-				FrameworkName = i,
+				FrameworkName = targetFramework,
 			};
-			tfi.CentralPackageVersions.AddRange(centralPackageVersions.Select(kv => new KeyValuePair<string, CentralPackageVersion>(kv.Key, new CentralPackageVersion(kv.Key, VersionRange.Parse(kv.Value)))));
 			return tfi;
 		}).ToList())
 		{
@@ -48,12 +47,10 @@ internal class NuGetHelper
 				ProjectUniqueName = projectPath,
 				OutputPath = Path.GetTempPath(),
 				OriginalTargetFrameworks = targetFrameworks.Select(i => i.ToString()).ToList(),
-				ConfigFilePaths = this.NugetSettings.GetConfigFilePaths(),
-				PackagesPath = SettingsUtility.GetGlobalPackagesFolder(this.NugetSettings),
-				Sources = SettingsUtility.GetEnabledSources(this.NugetSettings).ToList(),
-				FallbackFolders = SettingsUtility.GetFallbackPackageFolders(this.NugetSettings).ToList(),
-				CentralPackageVersionsEnabled = true,
-				TargetFrameworks = targetFrameworks.Select(tf => new ProjectRestoreMetadataFrameworkInfo(tf)).ToList(),
+				ConfigFilePaths = this.Settings.GetConfigFilePaths(),
+				PackagesPath = SettingsUtility.GetGlobalPackagesFolder(this.Settings),
+				Sources = SettingsUtility.GetEnabledSources(this.Settings).ToList(),
+				FallbackFolders = SettingsUtility.GetFallbackPackageFolders(this.Settings).ToList(),
 			},
 			FilePath = projectPath,
 			Name = Path.GetFileNameWithoutExtension(projectPath),
@@ -71,7 +68,7 @@ internal class NuGetHelper
 		{
 			AllowNoOp = true,
 			CacheContext = sourceCacheContext,
-			CachingSourceProvider = new CachingSourceProvider(new PackageSourceProvider(this.NugetSettings)),
+			CachingSourceProvider = new CachingSourceProvider(new PackageSourceProvider(this.Settings)),
 			Log = NullLogger.Instance,
 		};
 
