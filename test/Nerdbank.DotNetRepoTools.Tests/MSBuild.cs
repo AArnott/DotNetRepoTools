@@ -16,4 +16,9 @@ internal class MSBuild
 	{
 		return this.ProjectCollection.GetLoadedProjects(Path.GetFullPath(projectFile)).FirstOrDefault() ?? this.ProjectCollection.LoadProject(projectFile);
 	}
+
+	internal void CloseAll()
+	{
+		this.ProjectCollection.UnloadAllProjects();
+	}
 }

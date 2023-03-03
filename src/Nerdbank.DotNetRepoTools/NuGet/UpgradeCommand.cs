@@ -100,7 +100,11 @@ public class UpgradeCommand : CommandBase
 		Project packagesProps = this.msbuild.EvaluateProjectFile(this.DirectoryPackagesPropsPath);
 		int versionsUpdated = 0;
 
-		SetPackageVersion(this.PackageId, this.PackageVersion);
+		bool topLevelExists = SetPackageVersion(this.PackageId, this.PackageVersion, addIfMissing: false);
+		if (!topLevelExists)
+		{
+			this.Console.WriteLine($"No version spec for {this.PackageId} was found. It will not be added, but its dependencies that do have versions specified will be updated where necessary to avoid downgrade warnings as if it were present.");
+		}
 
 		while (true)
 		{
@@ -109,6 +113,11 @@ public class UpgradeCommand : CommandBase
 			this.Console.WriteLine("Looking for package downgrade issues...");
 			NuGetFramework nugetFramework = NuGetFramework.Parse(this.TargetFramework);
 			List<PackageReference> packageReferences = packagesProps.GetItems(PackageVersionItemType).Select(pv => new PackageReference(new PackageIdentity(pv.EvaluatedInclude, NuGetVersion.Parse(pv.GetMetadataValue(VersionMetadata))), nugetFramework)).ToList();
+			if (!topLevelExists)
+			{
+				packageReferences.Add(new PackageReference(new PackageIdentity(this.PackageId, NuGetVersion.Parse(this.PackageVersion)), nugetFramework));
+			}
+
 			List<NuGetFramework> targetFrameworks = new() { nugetFramework };
 			SourceCacheContext sourceCacheContext = new()
 			{
@@ -136,12 +145,19 @@ public class UpgradeCommand : CommandBase
 		this.Console.WriteLine($"All done. {versionsUpdated} package versions were updated.");
 		packagesProps.Save();
 
-		void SetPackageVersion(string id, string version)
+		bool SetPackageVersion(string id, string version, bool addIfMissing = true)
 		{
 			ProjectItem? item = MSBuild.FindItem(packagesProps, PackageVersionItemType, id);
 			if (item is null)
 			{
-				item = packagesProps.AddItem(PackageVersionItemType, id).First();
+				if (addIfMissing)
+				{
+					item = packagesProps.AddItem(PackageVersionItemType, id).First();
+				}
+				else
+				{
+					return false;
+				}
 			}
 
 			string? oldVersion = item.GetMetadataValue(VersionMetadata);
@@ -156,6 +172,8 @@ public class UpgradeCommand : CommandBase
 				versionsUpdated++;
 				this.Console.WriteLine($"{id} {oldVersion} -> {version}");
 			}
+
+			return true;
 		}
 	}
 }

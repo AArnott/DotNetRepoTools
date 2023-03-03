@@ -29,7 +29,24 @@ public class UpgradeCommandTests : TestBase
 		AssertPackageVersion(newPackagesProps, "System.IO.Pipelines", "6.0.3");
 	}
 
-	private static void AssertPackageVersion(Project project, string id, string version)
+	[Fact]
+	public async Task OnlyTransitiveDependencies()
+	{
+		string packagesPropsPath = await this.PlaceAssetAsync("Directory.Packages.props");
+		UpgradeCommand command = new()
+		{
+			PackageId = "StreamJsonRpc",
+			PackageVersion = "2.13.33",
+			TargetFramework = "netstandard2.0",
+			DirectoryPackagesPropsPath = packagesPropsPath,
+		};
+
+		Project newPackagesProps = await this.ExecuteAsync(command);
+		AssertPackageVersion(newPackagesProps, "Nerdbank.Streams", "2.9.109");
+		AssertPackageVersion(newPackagesProps, "System.IO.Pipelines", "6.0.3");
+	}
+
+	private static void AssertPackageVersion(Project project, string id, string? version)
 	{
 		try
 		{
@@ -43,11 +60,19 @@ public class UpgradeCommandTests : TestBase
 
 	private async Task<Project> ExecuteAsync(UpgradeCommand command)
 	{
+		Project newPackagesProps = this.MSBuild.EvaluateProjectFile(command.DirectoryPackagesPropsPath);
+		bool topLevelItemDefined = MSBuild.FindItem(newPackagesProps, "PackageVersion", command.PackageId) is not null;
+
 		await command.ExecuteAsync();
 		this.DumpConsole(command.Console);
 
-		Project newPackagesProps = this.MSBuild.EvaluateProjectFile(command.DirectoryPackagesPropsPath);
-		AssertPackageVersion(newPackagesProps, command.PackageId, command.PackageVersion);
+		this.MSBuild.CloseAll();
+		newPackagesProps = this.MSBuild.EvaluateProjectFile(command.DirectoryPackagesPropsPath);
+
+		// Assert that the package version itself was updated, if it existed previously.
+		// If it did not exist previously, we should *not* have added it.
+		AssertPackageVersion(newPackagesProps, command.PackageId, topLevelItemDefined ? command.PackageVersion : null);
+
 		return newPackagesProps;
 	}
 }
