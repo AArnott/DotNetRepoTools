@@ -33,6 +33,11 @@ public class UpgradeCommandTests : TestBase
 	public async Task OnlyTransitiveDependencies()
 	{
 		string packagesPropsPath = await this.PlaceAssetAsync("Directory.Packages.props");
+
+		// As a test sanity check, ensure the package we're updating doesn't even appear, since we're testing that we can update transitive dependencies
+		// via a meta-package that isn't referenced.
+		Assert.Null(MSBuild.FindItem(this.MSBuild.EvaluateProjectFile(packagesPropsPath), "PackageVersion", "StreamJsonRpc"));
+
 		UpgradeCommand command = new()
 		{
 			PackageId = "StreamJsonRpc",

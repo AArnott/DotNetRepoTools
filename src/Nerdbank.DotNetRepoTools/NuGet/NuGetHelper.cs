@@ -37,7 +37,7 @@ internal class NuGetHelper
 		{
 			Dependencies = packages.Select(i => new LibraryDependency
 			{
-				LibraryRange = new LibraryRange(i.PackageIdentity.Id, new VersionRange(i.PackageIdentity.Version), LibraryDependencyTarget.Package),
+				LibraryRange = new LibraryRange(i.PackageIdentity.Id, i.AllowedVersions, LibraryDependencyTarget.Package),
 			}).ToList(),
 			RestoreMetadata = new ProjectRestoreMetadata
 			{

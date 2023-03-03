@@ -107,23 +107,25 @@ public class UpgradeCommand : CommandBase
 			this.Console.WriteLine($"No version spec for {this.PackageId} was found. It will not be added, but its dependencies that do have versions specified will be updated where necessary to avoid downgrade warnings as if it were present.");
 		}
 
+		NuGetFramework nugetFramework = NuGetFramework.Parse(this.TargetFramework);
+		List<NuGetFramework> targetFrameworks = new() { nugetFramework };
+		SourceCacheContext sourceCacheContext = new()
+		{
+			IgnoreFailedSources = true,
+		};
+
 		while (true)
 		{
 			this.CancellationToken.ThrowIfCancellationRequested();
 
 			this.Console.WriteLine("Looking for package downgrade issues...");
-			NuGetFramework nugetFramework = NuGetFramework.Parse(this.TargetFramework);
-			List<PackageReference> packageReferences = packagesProps.GetItems(PackageVersionItemType).Select(pv => new PackageReference(new PackageIdentity(pv.EvaluatedInclude, NuGetVersion.Parse(pv.GetMetadataValue(VersionMetadata))), nugetFramework)).ToList();
+			List<PackageReference> packageReferences = packagesProps.GetItems(PackageVersionItemType)
+				.Select(pv => CreatePackageReference(pv.EvaluatedInclude, pv.GetMetadataValue(VersionMetadata))).ToList();
 			if (!topLevelExists)
 			{
-				packageReferences.Add(new PackageReference(new PackageIdentity(this.PackageId, NuGetVersion.Parse(this.PackageVersion)), nugetFramework));
+				packageReferences.Add(CreatePackageReference(this.PackageId, this.PackageVersion));
 			}
 
-			List<NuGetFramework> targetFrameworks = new() { nugetFramework };
-			SourceCacheContext sourceCacheContext = new()
-			{
-				IgnoreFailedSources = true,
-			};
 			RestoreTargetGraph? restoreGraph = await nuget.GetRestoreTargetGraphAsync(packageReferences, this.DirectoryPackagesPropsPath, targetFrameworks, sourceCacheContext, this.CancellationToken);
 			Assumes.NotNull(restoreGraph);
 
@@ -145,6 +147,17 @@ public class UpgradeCommand : CommandBase
 
 		this.Console.WriteLine($"All done. {versionsUpdated} package versions were updated.");
 		packagesProps.Save();
+
+		PackageReference CreatePackageReference(string id, string version)
+		{
+			return new PackageReference(
+				new PackageIdentity(id, null),
+				nugetFramework,
+				userInstalled: true,
+				developmentDependency: false,
+				requireReinstallation: false,
+				VersionRange.Parse(version));
+		}
 
 		bool SetPackageVersion(string id, string version, bool addIfMissing = true)
 		{
