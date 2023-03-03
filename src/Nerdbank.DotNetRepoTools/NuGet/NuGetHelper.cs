@@ -162,24 +162,17 @@ internal class NuGetHelper
 		VersionRange? newVersionParsed = VersionRange.Parse(version);
 		if (allowDowngrade || oldVersionParsed is null || oldVersionParsed.MinVersion < newVersionParsed.MinVersion)
 		{
-			if (item.Xml.ContainingProject == directoryPackagesPropsXml)
+			ProjectMetadataElement? versionMetadata = item.Xml.Metadata.SingleOrDefault(m => string.Equals(m.Name, VersionMetadata, StringComparison.OrdinalIgnoreCase));
+			if (versionMetadata is null)
 			{
-				ProjectMetadataElement? versionMetadata = item.Xml.Metadata.SingleOrDefault(m => string.Equals(m.Name, VersionMetadata, StringComparison.OrdinalIgnoreCase));
-				if (versionMetadata is null)
-				{
-					versionMetadata = item.Xml.AddMetadata(VersionMetadata, ProjectCollection.Escape(version), expressAsAttribute: true);
-				}
-				else
-				{
-					versionMetadata.Value = ProjectCollection.Escape(version);
-				}
-
-				changed = true;
+				versionMetadata = item.Xml.AddMetadata(VersionMetadata, ProjectCollection.Escape(version), expressAsAttribute: true);
 			}
 			else
 			{
-				this.Console.Error.WriteLine($"PackageVersion for {id} was defined in unsupported file \"{item.Xml.ContainingProject.FullPath}\".");
+				versionMetadata.Value = ProjectCollection.Escape(version);
 			}
+
+			changed = true;
 		}
 
 		this.Console.WriteLine(oldVersion.Length == 0 ? $"{id} {version}" : $"{id} {oldVersion} -> {version}");

@@ -4,7 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Nerdbank.Streams" Version="$(NerdbankStreamsVersion)" />
-    <PackageVersion Include="System.IO.Pipelines" Version="4.5.3" />
     <PackageVersion Include="System.Memory" Version="[4.5.1,)" />
   </ItemGroup>
+  <Import Project="Directory.Packages.2.props"/>
 </Project>
