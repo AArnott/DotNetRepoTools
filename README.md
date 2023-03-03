@@ -11,7 +11,7 @@
 
 Install or upgrade this tool with the following command:
 
-    dotnet tool update -g Nerdbank.DotNetRepoTools --prerelease
+    dotnet tool update -g Nerdbank.DotNetRepoTools --prerelease --add-source https://pkgs.dev.azure.com/andrewarnott/OSS/_packaging/PublicCI/nuget/v3/index.json
 
 ## Commands
 
