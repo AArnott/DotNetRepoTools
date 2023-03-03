@@ -2,7 +2,7 @@
 
 ***A CLI toolbox for repo maintenance***
 
-[![NuGet package](https://img.shields.io/nuget/v/Nerdbank.DotNetRepoTools.svg)](https://nuget.org/packages/Nerdbank.DotNetRepoTools)
+[![NuGet package](https://img.shields.io/nuget/v/Nerdbank.DotNetRepoTools.svg)](https://dev.azure.com/andrewarnott/OSS/_artifacts/feed/PublicCI/NuGet/Nerdbank.DotNetRepoTools)
 [![Build Status](https://dev.azure.com/andrewarnott/OSS/_apis/build/status/DotNetRepoTools/DotNetRepoTools?branchName=main)](https://dev.azure.com/andrewarnott/OSS/_build/latest?definitionId=74&branchName=main)
 
 ## Usage
