@@ -86,7 +86,7 @@ public class UpgradeCommand : CommandBase
 		{
 			PackageId = ctxt.ParseResult.GetValueForArgument(packageIdArgument),
 			PackageVersion = ctxt.ParseResult.GetValueForArgument(packageVersionArgument),
-			DirectoryPackagesPropsPath = ctxt.ParseResult.GetValueForOption(pathOption)!.FullName,
+			DirectoryPackagesPropsPath = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Path.GetFullPath(DirectoryPackagesPropsFileName),
 			TargetFramework = ctxt.ParseResult.GetValueForOption(frameworkOption)!,
 		}.ExecuteAsync());
 
