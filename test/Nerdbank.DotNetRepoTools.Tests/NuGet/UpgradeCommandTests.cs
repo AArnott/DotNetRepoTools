@@ -1,12 +1,13 @@
 ﻿// Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using Microsoft;
 using Microsoft.Build.Evaluation;
 using Nerdbank.DotNetRepoTools.NuGet;
 
 namespace NuGet;
 
-public class UpgradeCommandTests : TestBase
+public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 {
 	private string packagesPropsPath = null!;
 
@@ -25,7 +26,7 @@ public class UpgradeCommandTests : TestBase
 	[Fact]
 	public async Task IncludesTransitiveDependencies()
 	{
-		UpgradeCommand command = new()
+		this.Command = new()
 		{
 			PackageId = "Nerdbank.Streams",
 			PackageVersion = "2.9.112",
@@ -33,7 +34,7 @@ public class UpgradeCommandTests : TestBase
 			DirectoryPackagesPropsPath = this.packagesPropsPath,
 		};
 
-		Project newPackagesProps = await this.ExecuteAsync(command);
+		Project newPackagesProps = await this.ExecuteAsync();
 		AssertPackageVersion(newPackagesProps, "System.IO.Pipelines", "6.0.3");
 	}
 
@@ -44,7 +45,7 @@ public class UpgradeCommandTests : TestBase
 		// via a meta-package that isn't referenced.
 		Assert.Null(MSBuild.FindItem(this.MSBuild.EvaluateProjectFile(this.packagesPropsPath), "PackageVersion", "StreamJsonRpc"));
 
-		UpgradeCommand command = new()
+		this.Command = new()
 		{
 			PackageId = "StreamJsonRpc",
 			PackageVersion = "2.13.33",
@@ -52,7 +53,7 @@ public class UpgradeCommandTests : TestBase
 			DirectoryPackagesPropsPath = this.packagesPropsPath,
 		};
 
-		Project newPackagesProps = await this.ExecuteAsync(command);
+		Project newPackagesProps = await this.ExecuteAsync();
 		AssertPackageVersion(newPackagesProps, "Nerdbank.Streams", "2.9.109");
 		AssertPackageVersion(newPackagesProps, "System.IO.Pipelines", "6.0.3");
 	}
@@ -60,7 +61,7 @@ public class UpgradeCommandTests : TestBase
 	[Fact]
 	public async Task ExplodeTransitiveDependencies()
 	{
-		UpgradeCommand command = new()
+		this.Command = new()
 		{
 			PackageId = "StreamJsonRpc",
 			PackageVersion = "2.13.33",
@@ -69,38 +70,26 @@ public class UpgradeCommandTests : TestBase
 			Explode = true,
 		};
 
-		Project newPackagesProps = await this.ExecuteAsync(command);
+		Project newPackagesProps = await this.ExecuteAsync();
 		AssertPackageVersion(newPackagesProps, "StreamJsonRpc", "2.13.33");
 		AssertPackageVersion(newPackagesProps, "Microsoft.VisualStudio.Threading", "17.1.46");
 		AssertPackageVersion(newPackagesProps, "Microsoft.VisualStudio.Validation", "17.0.53");
 	}
 
-	private static void AssertPackageVersion(Project project, string id, string? version)
+	private async Task<Project> ExecuteAsync()
 	{
-		try
-		{
-			Assert.Equal(version, MSBuild.FindItem(project, "PackageVersion", id)?.GetMetadataValue("Version"));
-		}
-		catch (Exception ex)
-		{
-			throw new Exception($"Failure while asserting version for package '{id}'.", ex);
-		}
-	}
+		Verify.Operation(this.Command is not null, $"Set {nameof(this.Command)} first.");
+		Project newPackagesProps = this.MSBuild.EvaluateProjectFile(this.Command.DirectoryPackagesPropsPath);
+		bool topLevelItemDefined = MSBuild.FindItem(newPackagesProps, "PackageVersion", this.Command.PackageId) is not null;
 
-	private async Task<Project> ExecuteAsync(UpgradeCommand command)
-	{
-		Project newPackagesProps = this.MSBuild.EvaluateProjectFile(command.DirectoryPackagesPropsPath);
-		bool topLevelItemDefined = MSBuild.FindItem(newPackagesProps, "PackageVersion", command.PackageId) is not null;
-
-		await command.ExecuteAsync();
-		this.DumpConsole(command.Console);
+		await this.Command.ExecuteAsync();
 
 		this.MSBuild.CloseAll();
-		newPackagesProps = this.MSBuild.EvaluateProjectFile(command.DirectoryPackagesPropsPath);
+		newPackagesProps = this.MSBuild.EvaluateProjectFile(this.Command.DirectoryPackagesPropsPath);
 
 		// Assert that the package version itself was updated, if it existed previously.
 		// If it did not exist previously, we should *not* have added it.
-		AssertPackageVersion(newPackagesProps, command.PackageId, topLevelItemDefined || command.Explode ? command.PackageVersion : null);
+		AssertPackageVersion(newPackagesProps, this.Command.PackageId, topLevelItemDefined || this.Command.Explode ? this.Command.PackageVersion : null);
 
 		return newPackagesProps;
 	}

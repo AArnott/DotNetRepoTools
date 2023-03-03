@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.Reflection;
+using Microsoft.Build.Evaluation;
 
 public abstract class TestBase : IAsyncLifetime
 {
@@ -46,6 +47,18 @@ public abstract class TestBase : IAsyncLifetime
 	{
 		return Assembly.GetExecutingAssembly().GetManifestResourceStream($"Assets.{assetName.Replace('/', '.')}")
 			?? throw new ArgumentException($"No resource named {assetName} found under the Assets directory of the test project.");
+	}
+
+	protected static void AssertPackageVersion(Project project, string id, string? version)
+	{
+		try
+		{
+			Assert.Equal(version, MSBuild.FindItem(project, "PackageVersion", id)?.GetMetadataValue("Version"));
+		}
+		catch (Exception ex)
+		{
+			throw new Exception($"Failure while asserting version for package '{id}'.", ex);
+		}
 	}
 
 	protected void DumpConsole(IConsole console)
