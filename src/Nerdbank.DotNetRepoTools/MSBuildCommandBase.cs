@@ -30,12 +30,12 @@ public abstract class MSBuildCommandBase : CommandBase
 	}
 
 	/// <summary>
-	/// Gets or sets the msbuild helper to use.
+	/// Gets the msbuild helper to use.
 	/// </summary>
 	public MSBuild MSBuild
 	{
 		get => this.msbuild;
-		set
+		internal set
 		{
 			if (this.msbuild != value)
 			{

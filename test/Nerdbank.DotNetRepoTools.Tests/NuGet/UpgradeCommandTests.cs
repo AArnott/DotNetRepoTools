@@ -20,7 +20,8 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 	{
 		await base.InitializeAsync();
 
-		this.packagesProps = this.SynthesizeMSBuildAsset("Directory.Packages.props");
+		await this.SynthesizeAllMSBuildAssetsAsync();
+		this.packagesProps = this.MSBuild.GetProject(Path.Combine(this.StagingDirectory, "Directory.Packages.props"));
 	}
 
 	[Fact]
@@ -31,11 +32,11 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 			PackageId = "Nerdbank.Streams",
 			PackageVersion = "2.9.112",
 			TargetFramework = "netstandard2.0",
-			DirectoryPackagesPropsPath = this.packagesProps.FullPath,
+			Path = this.StagingDirectory,
 		};
 
-		Project newPackagesProps = await this.ExecuteAsync();
-		AssertPackageVersion(newPackagesProps, "System.IO.Pipelines", "6.0.3");
+		await this.ExecuteCommandAsync();
+		AssertPackageVersion(this.packagesProps, "System.IO.Pipelines", "6.0.3");
 	}
 
 	[Fact]
@@ -50,12 +51,12 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 			PackageId = "StreamJsonRpc",
 			PackageVersion = "2.13.33",
 			TargetFramework = "netstandard2.0",
-			DirectoryPackagesPropsPath = this.packagesProps.FullPath,
+			Path = this.StagingDirectory,
 		};
 
-		Project newPackagesProps = await this.ExecuteAsync();
-		AssertPackageVersion(newPackagesProps, "Nerdbank.Streams", "2.9.109");
-		AssertPackageVersion(newPackagesProps, "System.IO.Pipelines", "6.0.3");
+		await this.ExecuteCommandAsync();
+		AssertPackageVersion(this.packagesProps, "Nerdbank.Streams", "2.9.109");
+		AssertPackageVersion(this.packagesProps, "System.IO.Pipelines", "6.0.3");
 	}
 
 	[Fact]
@@ -66,14 +67,14 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 			PackageId = "StreamJsonRpc",
 			PackageVersion = "2.13.33",
 			TargetFramework = "netstandard2.0",
-			DirectoryPackagesPropsPath = this.packagesProps.FullPath,
+			Path = this.StagingDirectory,
 			Explode = true,
 		};
 
-		Project newPackagesProps = await this.ExecuteAsync();
-		AssertPackageVersion(newPackagesProps, "StreamJsonRpc", "2.13.33");
-		AssertPackageVersion(newPackagesProps, "Microsoft.VisualStudio.Threading", "17.1.46");
-		AssertPackageVersion(newPackagesProps, "Microsoft.VisualStudio.Validation", "17.0.53");
+		await this.ExecuteCommandAsync();
+		AssertPackageVersion(this.packagesProps, "StreamJsonRpc", "2.13.33");
+		AssertPackageVersion(this.packagesProps, "Microsoft.VisualStudio.Threading", "17.1.46");
+		AssertPackageVersion(this.packagesProps, "Microsoft.VisualStudio.Validation", "17.0.53");
 	}
 
 	[Fact]
@@ -87,29 +88,26 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 			PackageId = "StreamJsonRpc",
 			PackageVersion = "2.13.33",
 			TargetFramework = "netstandard2.0",
-			DirectoryPackagesPropsPath = this.packagesProps.FullPath,
+			Path = this.StagingDirectory,
 			Explode = true,
 		};
 
-		this.packagesProps = await this.ExecuteAsync();
+		await this.ExecuteCommandAsync();
 		AssertPackageVersion(this.packagesProps, "StreamJsonRpc", "2.13.33");
 		AssertPackageVersion(this.packagesProps, "Newtonsoft.Json", "13.0.2");
 	}
 
-	private async Task<Project> ExecuteAsync()
+	protected override async Task ExecuteCommandAsync()
 	{
 		Verify.Operation(this.Command is not null, $"Set {nameof(this.Command)} first.");
-		Project newPackagesProps = this.MSBuild.GetProject(this.Command.DirectoryPackagesPropsPath);
-		bool topLevelItemDefined = MSBuild.FindItem(newPackagesProps, "PackageVersion", this.Command.PackageId) is not null;
+		bool topLevelItemDefined = MSBuild.FindItem(this.packagesProps, "PackageVersion", this.Command.PackageId) is not null;
 
-		await this.Command.ExecuteAsync();
+		await base.ExecuteCommandAsync();
 
-		newPackagesProps = this.MSBuild.GetProject(this.Command.DirectoryPackagesPropsPath);
+		this.packagesProps.ReevaluateIfNecessary();
 
 		// Assert that the package version itself was updated, if it existed previously.
 		// If it did not exist previously, we should *not* have added it.
-		AssertPackageVersion(newPackagesProps, this.Command.PackageId, topLevelItemDefined || this.Command.Explode ? this.Command.PackageVersion : null);
-
-		return newPackagesProps;
+		AssertPackageVersion(this.packagesProps, this.Command.PackageId, topLevelItemDefined || this.Command.Explode ? this.Command.PackageVersion : null);
 	}
 }

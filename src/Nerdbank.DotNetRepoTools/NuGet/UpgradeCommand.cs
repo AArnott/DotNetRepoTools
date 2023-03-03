@@ -4,10 +4,10 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.IO;
-using Microsoft.Build.Evaluation;
 using NuGet.Commands;
 using NuGet.DependencyResolver;
 using NuGet.Frameworks;
+using NuGet.LibraryModel;
 using NuGet.Packaging;
 
 namespace Nerdbank.DotNetRepoTools.NuGet;
@@ -46,9 +46,9 @@ public class UpgradeCommand : MSBuildCommandBase
 	required public string PackageVersion { get; init; }
 
 	/// <summary>
-	/// Gets the path to the <c>Directory.Packages.props</c> file to be updated.
+	/// Gets the path to the project file or repo to upgrade.
 	/// </summary>
-	required public string DirectoryPackagesPropsPath { get; init; }
+	required public string Path { get; init; }
 
 	/// <summary>
 	/// Gets the target framework used to evaluate package dependencies.
@@ -68,7 +68,7 @@ public class UpgradeCommand : MSBuildCommandBase
 	{
 		Argument<string> packageIdArgument = new Argument<string>("id", "The ID of the root package to be upgraded.");
 		Argument<string> packageVersionArgument = new Argument<string>("version", "The version to upgrade to.");
-		Option<FileInfo> pathOption = new Option<FileInfo>("--path", "The path to the Directory.Packages.props file") { IsRequired = !File.Exists(DirectoryPackagesPropsFileName) }.ExistingOnly();
+		Option<FileInfo> pathOption = new Option<FileInfo>("--path", "The path to the project or repo to upgrade.") { IsRequired = !File.Exists(DirectoryPackagesPropsFileName) }.ExistingOnly();
 		Option<string> frameworkOption = new Option<string>("--framework", () => "netstandard2.0", "The target framework used to evaluate package dependencies.");
 		Option<bool> explodeOption = new("--explode", "Add PackageVersion items for every transitive dependency, so that they can be added as direct project dependencies as versions are pre-specified.");
 
@@ -84,10 +84,10 @@ public class UpgradeCommand : MSBuildCommandBase
 		{
 			PackageId = ctxt.ParseResult.GetValueForArgument(packageIdArgument),
 			PackageVersion = ctxt.ParseResult.GetValueForArgument(packageVersionArgument),
-			DirectoryPackagesPropsPath = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Path.GetFullPath(DirectoryPackagesPropsFileName),
+			Path = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? System.IO.Path.GetFullPath(DirectoryPackagesPropsFileName),
 			TargetFramework = ctxt.ParseResult.GetValueForOption(frameworkOption)!,
 			Explode = ctxt.ParseResult.GetValueForOption(explodeOption),
-		}.ExecuteAsync());
+		}.ExecuteAndDisposeAsync());
 
 		return command;
 	}
@@ -95,10 +95,14 @@ public class UpgradeCommand : MSBuildCommandBase
 	/// <inheritdoc/>
 	protected override async Task ExecuteCoreAsync()
 	{
-		Project packagesProps = this.MSBuild.GetProject(this.DirectoryPackagesPropsPath);
-		NuGetHelper nuget = new(this.Console, packagesProps);
-		int versionsUpdated = 1;
+		NuGetHelper nuget = new(this.MSBuild, this.Console, this.Path);
+		if (!nuget.VerifyCpvmActive())
+		{
+			this.ExitCode = 1;
+			return;
+		}
 
+		int versionsUpdated = 1;
 		bool topLevelExists = nuget.SetPackageVersion(this.PackageId, this.PackageVersion, addIfMissing: false);
 		if (!topLevelExists)
 		{
@@ -115,7 +119,7 @@ public class UpgradeCommand : MSBuildCommandBase
 
 		this.Console.WriteLine("Proactively resolving any introduced package downgrade issues in dependencies.");
 		RestoreTargetGraph restoreGraph = await nuget.GetRestoreTargetGraphAsync(new[] { topLevelReference }, targetFrameworks, this.CancellationToken);
-		foreach (GraphItem<RemoteResolveResult>? item in restoreGraph.Flattened)
+		foreach (GraphItem<RemoteResolveResult>? item in restoreGraph.Flattened.Where(i => i.Key.Type == LibraryType.Package))
 		{
 			if (nuget.SetPackageVersion(item.Key.Name, item.Key.Version.ToFullString(), addIfMissing: this.Explode, allowDowngrade: false))
 			{

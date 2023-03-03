@@ -2,6 +2,9 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.CommandLine;
+using System.CommandLine.IO;
+using Microsoft;
+using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
 using NuGet.Commands;
 using NuGet.Common;
@@ -23,6 +26,11 @@ internal class NuGetHelper
 	internal const string PackageVersionItemType = "PackageVersion";
 	internal const string VersionMetadata = "Version";
 
+	internal NuGetHelper(MSBuild msbuild, IConsole console, string projectPath)
+		: this(console, OpenOrCreateSandboxProject(msbuild, projectPath))
+	{
+	}
+
 	internal NuGetHelper(IConsole console, Project project)
 	{
 		this.Console = console;
@@ -40,6 +48,19 @@ internal class NuGetHelper
 	{
 		IgnoreFailedSources = true,
 	};
+
+	internal bool IsCpvmActive => string.Equals(this.Project.GetPropertyValue("ManagePackageVersionsCentrally"), "true", StringComparison.OrdinalIgnoreCase);
+
+	internal bool VerifyCpvmActive()
+	{
+		if (!this.IsCpvmActive)
+		{
+			this.Console.Error.WriteLine("Central package management is not active for this project, but this command requires this.");
+			return false;
+		}
+
+		return true;
+	}
 
 	internal PackageReference CreatePackageReference(string id, string version, NuGetFramework nugetFramework)
 	{
@@ -100,13 +121,23 @@ internal class NuGetHelper
 
 	internal bool SetPackageVersion(string id, string version, bool addIfMissing = true, bool allowDowngrade = true)
 	{
+		ProjectRootElement? directoryPackagesPropsXml = this.Project.Imports.FirstOrDefault(i => string.Equals(Path.GetFileName(i.ImportedProject.FullPath), "Directory.Packages.props", StringComparison.OrdinalIgnoreCase)).ImportedProject;
+		if (directoryPackagesPropsXml is null)
+		{
+			this.Console.Error.WriteLine($"Unable to find an imported Directory.Packages.props in your project. Unable to set {id} to {version}.");
+			return false;
+		}
+
 		bool changed = false;
 		ProjectItem? item = MSBuild.FindItem(this.Project, PackageVersionItemType, id);
 		if (item is null)
 		{
 			if (addIfMissing)
 			{
-				item = this.Project.AddItem(PackageVersionItemType, id).First();
+				directoryPackagesPropsXml.AddItem(PackageVersionItemType, ProjectCollection.Escape(id));
+				this.Project.ReevaluateIfNecessary();
+				item = MSBuild.FindItem(this.Project, PackageVersionItemType, id);
+				Assumes.NotNull(item);
 			}
 			else
 			{
@@ -119,8 +150,24 @@ internal class NuGetHelper
 		VersionRange? newVersionParsed = VersionRange.Parse(version);
 		if (allowDowngrade || oldVersionParsed is null || oldVersionParsed.MinVersion < newVersionParsed.MinVersion)
 		{
-			item.SetMetadataValue(VersionMetadata, version);
-			changed = true;
+			if (item.Xml.ContainingProject == directoryPackagesPropsXml)
+			{
+				ProjectMetadataElement? versionMetadata = item.Xml.Metadata.SingleOrDefault(m => string.Equals(m.Name, VersionMetadata, StringComparison.OrdinalIgnoreCase));
+				if (versionMetadata is null)
+				{
+					versionMetadata = item.Xml.AddMetadata(VersionMetadata, ProjectCollection.Escape(version), expressAsAttribute: true);
+				}
+				else
+				{
+					versionMetadata.Value = ProjectCollection.Escape(version);
+				}
+
+				changed = true;
+			}
+			else
+			{
+				this.Console.Error.WriteLine($"PackageVersion for {id} was defined in unsupported file \"{item.Xml.ContainingProject.FullPath}\".");
+			}
 		}
 
 		this.Console.WriteLine(oldVersion.Length == 0 ? $"{id} {version}" : $"{id} {oldVersion} -> {version}");
@@ -137,6 +184,7 @@ internal class NuGetHelper
 
 			this.Console.WriteLine("Looking for package downgrade issues...");
 
+			this.Project.ReevaluateIfNecessary();
 			List<PackageReference> packageReferences = this.Project.GetItems(PackageVersionItemType)
 				.Select(pv => this.CreatePackageReference(pv.EvaluatedInclude, pv.GetMetadataValue(VersionMetadata), framework)).ToList();
 
@@ -159,5 +207,21 @@ internal class NuGetHelper
 		}
 
 		return versionsUpdated;
+	}
+
+	private static Project OpenOrCreateSandboxProject(MSBuild msbuild, string path)
+	{
+		Project project;
+		if (File.Exists(path))
+		{
+			project = msbuild.GetProject(path);
+		}
+		else
+		{
+			project = msbuild.CreateSandboxProject(path);
+			msbuild.FillWithPackageReferences(project);
+		}
+
+		return project;
 	}
 }

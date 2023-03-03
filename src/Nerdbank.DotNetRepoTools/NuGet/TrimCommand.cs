@@ -33,7 +33,7 @@ internal class TrimCommand : MSBuildCommandBase
 		command.SetHandler(ctxt => new TrimCommand(ctxt)
 		{
 			Project = ctxt.ParseResult.GetValueForArgument(projectArgument).FullName,
-		}.ExecuteAsync());
+		}.ExecuteAndDisposeAsync());
 
 		return command;
 	}

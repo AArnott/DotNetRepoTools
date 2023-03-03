@@ -80,6 +80,16 @@ public abstract class CommandBase : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// Executes the command and immediately disposes of it.
+	/// </summary>
+	/// <returns>A task that tracks command completion.</returns>
+	public async Task ExecuteAndDisposeAsync()
+	{
+		await this.ExecuteAsync();
+		this.Dispose();
+	}
+
 	/// <inheritdoc/>
 	public void Dispose()
 	{

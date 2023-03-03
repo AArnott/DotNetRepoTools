@@ -1,0 +1,3 @@
+<Project>
+  <!-- This file must be present to block discovery of other such files in parent directories during testing. -->
+</Project>

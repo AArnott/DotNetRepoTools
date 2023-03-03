@@ -19,7 +19,8 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 	{
 		await base.InitializeAsync();
 
-		this.packagesProps = this.SynthesizeMSBuildAsset("Directory.Packages.props");
+		await this.SynthesizeAllMSBuildAssetsAsync();
+		this.packagesProps = this.MSBuild.GetProject(Path.Combine(this.StagingDirectory, "Directory.Packages.props"));
 	}
 
 	[Fact]
@@ -30,10 +31,10 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 
 		this.Command = new()
 		{
-			ProjectPath = this.packagesProps.FullPath,
+			ProjectPath = this.StagingDirectory,
 			TargetFramework = "netstandard2.0",
 		};
-		await this.Command.ExecuteAsync();
+		await this.ExecuteCommandAsync();
 
 		AssertPackageVersion(this.packagesProps, "System.IO.Pipelines", "6.0.3");
 	}

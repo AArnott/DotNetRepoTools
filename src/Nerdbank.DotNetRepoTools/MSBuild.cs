@@ -14,10 +14,10 @@ namespace Nerdbank.DotNetRepoTools;
 /// </summary>
 public class MSBuild : IDisposable
 {
-	/// <summary>
-	/// Gets or sets a value indicating whether dirty projects will be saved on disposal.
-	/// </summary>
-	public bool SaveOnDisposal { get; set; } = true;
+	static MSBuild()
+	{
+		MSBuildLocator.EnsureLoaded();
+	}
 
 	internal ProjectCollection ProjectCollection { get; } = new();
 
@@ -36,15 +36,22 @@ public class MSBuild : IDisposable
 	/// <inheritdoc/>
 	public void Dispose()
 	{
-		if (this.SaveOnDisposal)
+		this.SaveAll();
+		this.ProjectCollection.Dispose();
+	}
+
+	/// <summary>
+	/// Saves all changed project files and imports to disk.
+	/// </summary>
+	public void SaveAll()
+	{
+		foreach (ProjectRootElement pre in this.EnumerateLoadedXml())
 		{
-			foreach (Project project in this.ProjectCollection.LoadedProjects)
+			if (pre.HasUnsavedChanges)
 			{
-				project.Save();
+				pre.Save();
 			}
 		}
-
-		this.ProjectCollection.Dispose();
 	}
 
 	/// <summary>
@@ -72,11 +79,26 @@ public class MSBuild : IDisposable
 			using XmlReader xmlReader = XmlReader.Create(xml);
 			pre.ReloadFrom(xmlReader, throwIfUnsavedChanges: false);
 		}
+		else
+		{
+			pre.Sdk = "Microsoft.NET.Sdk";
+		}
 
+		pre.FullPath = projectPath;
 		return new Project(pre, ImmutableDictionary<string, string>.Empty, toolsVersion: null, this.ProjectCollection)
 		{
-			FullPath = projectPath,
 		};
+	}
+
+	/// <summary>
+	/// Reloads all project files and imports from disk.
+	/// </summary>
+	public void ReloadEverything()
+	{
+		foreach (ProjectRootElement pre in this.EnumerateLoadedXml())
+		{
+			pre.Reload();
+		}
 	}
 
 	/// <summary>
@@ -95,6 +117,39 @@ public class MSBuild : IDisposable
 		foreach (ProjectItem packageVersion in project.GetItems(NuGetHelper.PackageVersionItemType))
 		{
 			project.AddItemFast("PackageReference", packageVersion.EvaluatedInclude);
+		}
+	}
+
+	private IEnumerable<ProjectRootElement> EnumerateLoadedXml()
+	{
+		foreach (Project project in this.ProjectCollection.LoadedProjects)
+		{
+			yield return project.Xml;
+			foreach (ResolvedImport resolvedImport in project.Imports)
+			{
+				if (resolvedImport.ImportedProject is not null)
+				{
+					yield return resolvedImport.ImportedProject;
+				}
+			}
+		}
+	}
+
+	/// <summary>
+	/// Finds and uses the MSBuild that is installed on the machine.
+	/// </summary>
+	public static class MSBuildLocator
+	{
+		static MSBuildLocator()
+		{
+			Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
+		}
+
+		/// <summary>
+		/// Ensures that the MSBuild Locator has been run.
+		/// </summary>
+		public static void EnsureLoaded()
+		{
 		}
 	}
 }

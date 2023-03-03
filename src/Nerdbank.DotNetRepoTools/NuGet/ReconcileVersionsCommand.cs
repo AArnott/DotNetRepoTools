@@ -3,7 +3,6 @@
 
 using System.CommandLine;
 using System.CommandLine.Invocation;
-using Microsoft.Build.Evaluation;
 using NuGet.Frameworks;
 
 namespace Nerdbank.DotNetRepoTools.NuGet;
@@ -45,7 +44,7 @@ public class ReconcileVersionsCommand : MSBuildCommandBase
 	/// <returns>The command.</returns>
 	internal static Command CreateCommand()
 	{
-		Argument<FileInfo> projectArgument = new Argument<FileInfo>("project", "The path to the Directory.Packages.props file.").ExistingOnly();
+		Argument<FileInfo> projectArgument = new Argument<FileInfo>("project", "The path to the project or repo to resolve version issues with.").ExistingOnly();
 		Option<string> frameworkOption = new Option<string>("--framework", () => "netstandard2.0", "The target framework used to evaluate package dependencies.");
 
 		Command command = new("reconcile-versions", "Resolves all package downgrade warnings.")
@@ -57,7 +56,7 @@ public class ReconcileVersionsCommand : MSBuildCommandBase
 		{
 			ProjectPath = ctxt.ParseResult.GetValueForArgument(projectArgument).FullName,
 			TargetFramework = ctxt.ParseResult.GetValueForOption(frameworkOption)!,
-		}.ExecuteAsync());
+		}.ExecuteAndDisposeAsync());
 
 		return command;
 	}
@@ -65,8 +64,7 @@ public class ReconcileVersionsCommand : MSBuildCommandBase
 	/// <inheritdoc/>
 	protected override async Task ExecuteCoreAsync()
 	{
-		Project project = this.MSBuild.GetProject(this.ProjectPath);
-		NuGetHelper nuget = new(this.Console, project);
+		NuGetHelper nuget = new(this.MSBuild, this.Console, this.ProjectPath);
 
 		NuGetFramework nugetFramework = NuGetFramework.Parse(this.TargetFramework);
 		int versionsUpdated = await nuget.CorrectDowngradeIssuesAsync(nugetFramework, null, this.CancellationToken);

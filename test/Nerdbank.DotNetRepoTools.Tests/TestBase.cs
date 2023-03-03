@@ -7,6 +7,13 @@ using Microsoft.Build.Evaluation;
 
 public abstract class TestBase : IAsyncLifetime
 {
+	private const string AssetsPrefix = "Assets.";
+
+	static TestBase()
+	{
+		MSBuild.MSBuildLocator.EnsureLoaded();
+	}
+
 	public TestBase(ITestOutputHelper logger)
 	{
 		this.Logger = logger;
@@ -18,7 +25,7 @@ public abstract class TestBase : IAsyncLifetime
 
 	public ITestOutputHelper Logger { get; }
 
-	internal MSBuild MSBuild { get; } = new() { SaveOnDisposal = false };
+	internal MSBuild MSBuild { get; } = new();
 
 	internal TempFileCollection TempFiles { get; } = new();
 
@@ -29,19 +36,20 @@ public abstract class TestBase : IAsyncLifetime
 
 	public virtual Task DisposeAsync()
 	{
-		this.TempFiles.Dispose();
 		this.MSBuild.Dispose();
+		this.TempFiles.Dispose();
 		return Task.CompletedTask;
 	}
 
 	internal static Stream GetAsset(string assetName)
 	{
-		return Assembly.GetExecutingAssembly().GetManifestResourceStream($"Assets.{assetName.Replace('/', '.')}")
+		return Assembly.GetExecutingAssembly().GetManifestResourceStream($"{AssetsPrefix}{assetName.Replace('/', '.')}")
 			?? throw new ArgumentException($"No resource named {assetName} found under the Assets directory of the test project.");
 	}
 
 	protected static void AssertPackageVersion(Project project, string id, string? version)
 	{
+		project.ReevaluateIfNecessary();
 		try
 		{
 			Assert.Equal(version, MSBuild.FindItem(project, "PackageVersion", id)?.GetMetadataValue("Version"));
@@ -70,6 +78,21 @@ public abstract class TestBase : IAsyncLifetime
 	protected Project SynthesizeMSBuildAsset(string assetName)
 	{
 		return this.MSBuild.SynthesizeVolatileProject(Path.Combine(this.StagingDirectory, assetName), GetAsset(assetName));
+	}
+
+	protected async Task SynthesizeAllMSBuildAssetsAsync()
+	{
+		foreach (string streamName in Assembly.GetExecutingAssembly().GetManifestResourceNames())
+		{
+			if (streamName.StartsWith(AssetsPrefix, StringComparison.Ordinal))
+			{
+				string assetName = streamName.Substring(AssetsPrefix.Length);
+
+				// Synthesize msbuild in memory isn't enough to satisfy recursive parent directory imports.
+				////this.SynthesizeMSBuildAsset(assetName);
+				await this.PlaceAssetAsync(assetName);
+			}
+		}
 	}
 
 	protected async Task<string> PlaceAssetAsync(string assetName, string? baseDirectory = null, CancellationToken cancellationToken = default)

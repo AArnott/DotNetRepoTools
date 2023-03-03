@@ -1,6 +1,9 @@
 <Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="Nerdbank.Streams" Version="2.0.214" />
+    <PackageVersion Include="Nerdbank.Streams" Version="$(NerdbankStreamsVersion)" />
     <PackageVersion Include="System.IO.Pipelines" Version="4.5.3" />
     <PackageVersion Include="System.Memory" Version="[4.5.1,)" />
   </ItemGroup>
