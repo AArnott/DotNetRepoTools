@@ -65,6 +65,11 @@ public class UpgradeCommand : CommandBase
 	required public string TargetFramework { get; init; }
 
 	/// <summary>
+	/// Gets a value indicating whether all transitive dependencies will be explicitly added (not just updated as needed if they exist).
+	/// </summary>
+	public bool Explode { get; init; }
+
+	/// <summary>
 	/// Creates the command.
 	/// </summary>
 	/// <returns>The command.</returns>
@@ -74,6 +79,7 @@ public class UpgradeCommand : CommandBase
 		Argument<string> packageVersionArgument = new Argument<string>("version", "The version to upgrade to.");
 		Option<FileInfo> pathOption = new Option<FileInfo>("--path", "The path to the Directory.Packages.props file to update.") { IsRequired = !File.Exists(DirectoryPackagesPropsFileName) }.ExistingOnly();
 		Option<string> frameworkOption = new Option<string>("--framework", () => "netstandard2.0", "The target framework used to evaluate package dependencies.");
+		Option<bool> explodeOption = new("--explode", "Add PackageVersion items for every transitive dependency, so that they can be added as direct project dependencies as versions are pre-specified.");
 
 		Command command = new("upgrade", "Upgrade a package dependency, and all transitive dependencies such that no package downgrade warnings occur.")
 		{
@@ -81,6 +87,7 @@ public class UpgradeCommand : CommandBase
 			packageVersionArgument,
 			pathOption,
 			frameworkOption,
+			explodeOption,
 		};
 		command.SetHandler(ctxt => new UpgradeCommand(ctxt)
 		{
@@ -88,6 +95,7 @@ public class UpgradeCommand : CommandBase
 			PackageVersion = ctxt.ParseResult.GetValueForArgument(packageVersionArgument),
 			DirectoryPackagesPropsPath = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Path.GetFullPath(DirectoryPackagesPropsFileName),
 			TargetFramework = ctxt.ParseResult.GetValueForOption(frameworkOption)!,
+			Explode = ctxt.ParseResult.GetValueForOption(explodeOption),
 		}.ExecuteAsync());
 
 		return command;
@@ -113,21 +121,34 @@ public class UpgradeCommand : CommandBase
 		{
 			IgnoreFailedSources = true,
 		};
+		PackageReference topLevelReference = CreatePackageReference(this.PackageId, this.PackageVersion);
+
+		if (this.Explode)
+		{
+			// Visit every transitive dependency and explicitly set it.
+			this.CancellationToken.ThrowIfCancellationRequested();
+
+			RestoreTargetGraph restoreGraph = await RestoreAsync(new[] { topLevelReference });
+			foreach (GraphItem<RemoteResolveResult>? item in restoreGraph.Flattened)
+			{
+				SetPackageVersion(item.Key.Name, item.Key.Version.ToFullString());
+			}
+		}
 
 		while (true)
 		{
 			this.CancellationToken.ThrowIfCancellationRequested();
 
 			this.Console.WriteLine("Looking for package downgrade issues...");
+
 			List<PackageReference> packageReferences = packagesProps.GetItems(PackageVersionItemType)
 				.Select(pv => CreatePackageReference(pv.EvaluatedInclude, pv.GetMetadataValue(VersionMetadata))).ToList();
 			if (!topLevelExists)
 			{
-				packageReferences.Add(CreatePackageReference(this.PackageId, this.PackageVersion));
+				packageReferences.Add(topLevelReference);
 			}
 
-			RestoreTargetGraph? restoreGraph = await nuget.GetRestoreTargetGraphAsync(packageReferences, this.DirectoryPackagesPropsPath, targetFrameworks, sourceCacheContext, this.CancellationToken);
-			Assumes.NotNull(restoreGraph);
+			RestoreTargetGraph restoreGraph = await RestoreAsync(packageReferences);
 
 			bool fixesApplied = false;
 			foreach (DowngradeResult<RemoteResolveResult> conflict in restoreGraph.AnalyzeResult.Downgrades)
@@ -147,6 +168,13 @@ public class UpgradeCommand : CommandBase
 
 		this.Console.WriteLine($"All done. {versionsUpdated} package versions were updated.");
 		packagesProps.Save();
+
+		async Task<RestoreTargetGraph> RestoreAsync(IReadOnlyCollection<PackageReference> packageReferences)
+		{
+			RestoreTargetGraph? restoreGraph = await nuget.GetRestoreTargetGraphAsync(packageReferences, this.DirectoryPackagesPropsPath, targetFrameworks, sourceCacheContext, this.CancellationToken);
+			Assumes.NotNull(restoreGraph);
+			return restoreGraph;
+		}
 
 		PackageReference CreatePackageReference(string id, string version)
 		{

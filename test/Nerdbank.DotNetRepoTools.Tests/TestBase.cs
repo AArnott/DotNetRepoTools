@@ -4,7 +4,7 @@
 using System.CommandLine;
 using System.Reflection;
 
-public abstract class TestBase : IDisposable
+public abstract class TestBase : IAsyncLifetime
 {
 	private readonly List<string> tempFiles = new();
 	private readonly List<string> tempDirectories = new();
@@ -22,10 +22,24 @@ public abstract class TestBase : IDisposable
 
 	internal MSBuild MSBuild { get; } = new();
 
-	public void Dispose()
+	public virtual Task InitializeAsync()
 	{
-		this.Dispose(disposing: true);
-		GC.SuppressFinalize(this);
+		return Task.CompletedTask;
+	}
+
+	public virtual Task DisposeAsync()
+	{
+		foreach (string file in this.tempFiles)
+		{
+			File.Delete(file);
+		}
+
+		foreach (string dir in this.tempDirectories)
+		{
+			Directory.Delete(dir, recursive: true);
+		}
+
+		return Task.CompletedTask;
 	}
 
 	internal static Stream GetAsset(string assetName)
@@ -70,20 +84,4 @@ public abstract class TestBase : IDisposable
 	protected void RegisterTemporaryFile(string path) => this.tempFiles.Add(path);
 
 	protected void RegisterTemporaryDirectory(string path) => this.tempDirectories.Add(path);
-
-	protected virtual void Dispose(bool disposing)
-	{
-		if (disposing)
-		{
-			foreach (string file in this.tempFiles)
-			{
-				File.Delete(file);
-			}
-
-			foreach (string dir in this.tempDirectories)
-			{
-				Directory.Delete(dir, recursive: true);
-			}
-		}
-	}
 }
