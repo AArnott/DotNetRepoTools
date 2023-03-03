@@ -99,11 +99,12 @@ public class UpgradeCommand : CommandBase
 	{
 		Project packagesProps = this.msbuild.EvaluateProjectFile(this.DirectoryPackagesPropsPath);
 		NuGetHelper nuget = new(this.Console, packagesProps);
-		int versionsUpdated = 0;
+		int versionsUpdated = 1;
 
 		bool topLevelExists = nuget.SetPackageVersion(this.PackageId, this.PackageVersion, addIfMissing: false);
 		if (!topLevelExists)
 		{
+			versionsUpdated--;
 			this.Console.WriteLine($"No version spec for {this.PackageId} was found. It will not be added, but its dependencies that do have versions specified will be updated where necessary to avoid downgrade warnings as if it were present.");
 		}
 
@@ -111,22 +112,18 @@ public class UpgradeCommand : CommandBase
 		List<NuGetFramework> targetFrameworks = new() { nugetFramework };
 		PackageReference topLevelReference = nuget.CreatePackageReference(this.PackageId, this.PackageVersion, nugetFramework);
 
-		if (this.Explode)
-		{
-			// Visit every transitive dependency and explicitly set it.
-			this.CancellationToken.ThrowIfCancellationRequested();
+		// Visit every transitive dependency and explicitly set it.
+		this.CancellationToken.ThrowIfCancellationRequested();
 
-			RestoreTargetGraph restoreGraph = await nuget.GetRestoreTargetGraphAsync(new[] { topLevelReference }, targetFrameworks, this.CancellationToken);
-			foreach (GraphItem<RemoteResolveResult>? item in restoreGraph.Flattened)
+		this.Console.WriteLine("Proactively resolving any introduced package downgrade issues in dependencies.");
+		RestoreTargetGraph restoreGraph = await nuget.GetRestoreTargetGraphAsync(new[] { topLevelReference }, targetFrameworks, this.CancellationToken);
+		foreach (GraphItem<RemoteResolveResult>? item in restoreGraph.Flattened)
+		{
+			if (nuget.SetPackageVersion(item.Key.Name, item.Key.Version.ToFullString(), addIfMissing: this.Explode, allowDowngrade: false))
 			{
-				if (nuget.SetPackageVersion(item.Key.Name, item.Key.Version.ToFullString()))
-				{
-					versionsUpdated++;
-				}
+				versionsUpdated++;
 			}
 		}
-
-		versionsUpdated += await nuget.CorrectDowngradeIssuesAsync(nugetFramework, !topLevelExists ? topLevelReference : null, this.CancellationToken);
 
 		this.Console.WriteLine($"All done. {versionsUpdated} package versions were updated.");
 		packagesProps.Save();

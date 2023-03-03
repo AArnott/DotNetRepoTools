@@ -76,6 +76,29 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		AssertPackageVersion(newPackagesProps, "Microsoft.VisualStudio.Validation", "17.0.53");
 	}
 
+	[Fact]
+	public async Task ExplodeTransitiveDependencies_DoesNotDowngradeAnything()
+	{
+		// Introduce a downgrade issue.
+		Project newPackagesProps = this.MSBuild.EvaluateProjectFile(this.packagesPropsPath);
+		newPackagesProps.AddItem("PackageVersion", "Newtonsoft.Json").Single().SetMetadataValue("Version", "13.0.2");
+		newPackagesProps.Save();
+
+		this.Command = new()
+		{
+			PackageId = "StreamJsonRpc",
+			PackageVersion = "2.13.33",
+			TargetFramework = "netstandard2.0",
+			DirectoryPackagesPropsPath = this.packagesPropsPath,
+			Explode = true,
+		};
+
+		this.MSBuild.CloseAll();
+		newPackagesProps = await this.ExecuteAsync();
+		AssertPackageVersion(newPackagesProps, "StreamJsonRpc", "2.13.33");
+		AssertPackageVersion(newPackagesProps, "Newtonsoft.Json", "13.0.2");
+	}
+
 	private async Task<Project> ExecuteAsync()
 	{
 		Verify.Operation(this.Command is not null, $"Set {nameof(this.Command)} first.");

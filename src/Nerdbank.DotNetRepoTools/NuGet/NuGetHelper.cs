@@ -98,8 +98,9 @@ internal class NuGetHelper
 		return restoreTargetGraph;
 	}
 
-	internal bool SetPackageVersion(string id, string version, bool addIfMissing = true)
+	internal bool SetPackageVersion(string id, string version, bool addIfMissing = true, bool allowDowngrade = true)
 	{
+		bool changed = false;
 		ProjectItem? item = MSBuild.FindItem(this.Project, PackageVersionItemType, id);
 		if (item is null)
 		{
@@ -109,24 +110,21 @@ internal class NuGetHelper
 			}
 			else
 			{
-				return false;
+				return changed;
 			}
 		}
 
-		string? oldVersion = item.GetMetadataValue(VersionMetadata);
-		item.SetMetadataValue(VersionMetadata, version);
-		if (oldVersion is null)
+		string oldVersion = item.GetMetadataValue(VersionMetadata);
+		VersionRange? oldVersionParsed = oldVersion.Length > 0 ? VersionRange.Parse(oldVersion) : null;
+		VersionRange? newVersionParsed = VersionRange.Parse(version);
+		if (allowDowngrade || oldVersionParsed is null || oldVersionParsed.MinVersion < newVersionParsed.MinVersion)
 		{
-			this.Console.WriteLine($"{id} {version}");
-			return true;
-		}
-		else if (oldVersion != version)
-		{
-			this.Console.WriteLine($"{id} {oldVersion} -> {version}");
-			return true;
+			item.SetMetadataValue(VersionMetadata, version);
+			changed = true;
 		}
 
-		return false;
+		this.Console.WriteLine(oldVersion.Length == 0 ? $"{id} {version}" : $"{id} {oldVersion} -> {version}");
+		return changed;
 	}
 
 	internal async Task<int> CorrectDowngradeIssuesAsync(NuGetFramework framework, PackageReference? hypotheticalPackageReference, CancellationToken cancellationToken)
