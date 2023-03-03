@@ -115,7 +115,19 @@ internal class NuGetHelper
 		// Restore the package without generating extra files
 		IReadOnlyList<RestoreResultPair> restoreResult = await RestoreRunner.RunWithoutCommit(requests, restoreArgs);
 
-		RestoreTargetGraph? restoreTargetGraph = restoreResult[0].Result.RestoreGraphs.First();
+		RestoreResult restoreResultResult = restoreResult[0].Result;
+		RestoreTargetGraph restoreTargetGraph = restoreResultResult.RestoreGraphs.First();
+
+		foreach (IAssetsLogMessage message in restoreResultResult.LogMessages)
+		{
+			this.Console.Error.WriteLine($"{message.Message}");
+		}
+
+		foreach (LibraryRange issue in restoreTargetGraph.Unresolved)
+		{
+			this.Console.Error.WriteLine($"Unresolved package: {issue.Name} {issue.VersionRange}");
+		}
+
 		return restoreTargetGraph;
 	}
 
