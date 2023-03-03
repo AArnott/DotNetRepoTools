@@ -80,6 +80,7 @@ public class UpgradeCommand : CommandBase
 			packageIdArgument,
 			packageVersionArgument,
 			pathOption,
+			frameworkOption,
 		};
 		command.SetHandler(ctxt => new UpgradeCommand(ctxt)
 		{
