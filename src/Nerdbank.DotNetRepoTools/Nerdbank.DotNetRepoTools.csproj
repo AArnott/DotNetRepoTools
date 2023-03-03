@@ -14,6 +14,6 @@
 		<PackageReference Include="Microsoft.Build" PrivateAssets="compile" />
 		<PackageReference Include="Microsoft.VisualStudio.Validation" />
 		<PackageReference Include="NuGet.Commands" PrivateAssets="compile" />
-		<PackageReference Include="System.CommandLine" PrivateAssets="all" />
+		<PackageReference Include="System.CommandLine" PrivateAssets="compile" />
 	</ItemGroup>
 </Project>
