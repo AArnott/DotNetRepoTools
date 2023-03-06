@@ -2,6 +2,8 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.CommandLine;
+using NuGet.Common;
+using NuGet.Credentials;
 
 namespace Nerdbank.DotNetRepoTools.NuGet;
 
@@ -16,6 +18,7 @@ internal class NuGetCommand
 	/// <returns>The command.</returns>
 	internal static Command CreateCommand()
 	{
+		DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
 		Command nuget = new("nuget", "NuGet maintenance commands")
 		{
 			ReconcileVersionsCommand.CreateCommand(),
