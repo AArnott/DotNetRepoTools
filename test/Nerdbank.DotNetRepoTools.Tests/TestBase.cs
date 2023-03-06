@@ -47,12 +47,14 @@ public abstract class TestBase : IAsyncLifetime
 			?? throw new ArgumentException($"No resource named {assetName} found under the Assets directory of the test project.");
 	}
 
-	protected static void AssertPackageVersion(Project project, string id, string? version)
+	protected static void AssertPackageVersion(Project project, string id, string? version, bool compareUnevaluatedValue = false)
 	{
 		project.ReevaluateIfNecessary();
 		try
 		{
-			Assert.Equal(version, MSBuild.FindItem(project, "PackageVersion", id)?.GetMetadataValue("Version"));
+			ProjectMetadata? metadatum = MSBuild.FindItem(project, "PackageVersion", id)?.GetMetadata("Version");
+			string? actual = compareUnevaluatedValue ? metadatum?.UnevaluatedValue : metadatum?.EvaluatedValue;
+			Assert.Equal(version, actual);
 		}
 		catch (Exception ex)
 		{

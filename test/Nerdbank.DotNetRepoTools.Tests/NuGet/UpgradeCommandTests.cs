@@ -9,6 +9,7 @@ namespace NuGet;
 
 public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 {
+	private Project consumingProj = null!;
 	private Project packagesProps = null!;
 
 	public UpgradeCommandTests(ITestOutputHelper logger)
@@ -21,6 +22,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		await base.InitializeAsync();
 
 		await this.SynthesizeAllMSBuildAssetsAsync();
+		this.consumingProj = this.MSBuild.SynthesizeVolatileProject(Path.Combine(this.StagingDirectory, "repotools.csproj"));
 		this.packagesProps = this.MSBuild.GetProject(Path.Combine(this.StagingDirectory, "Directory.Packages.props"));
 	}
 
@@ -36,7 +38,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		};
 
 		await this.ExecuteCommandAsync();
-		AssertPackageVersion(this.packagesProps, "System.IO.Pipelines", "6.0.3");
+		this.AssertPackageVersion("System.IO.Pipelines", "6.0.3");
 	}
 
 	[Fact]
@@ -44,7 +46,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 	{
 		// As a test sanity check, ensure the package we're updating doesn't even appear, since we're testing that we can update transitive dependencies
 		// via a meta-package that isn't referenced.
-		Assert.Null(MSBuild.FindItem(this.packagesProps, "PackageVersion", "StreamJsonRpc"));
+		Assert.Null(MSBuild.FindItem(this.consumingProj, "PackageVersion", "StreamJsonRpc"));
 
 		this.Command = new()
 		{
@@ -55,8 +57,8 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		};
 
 		await this.ExecuteCommandAsync();
-		AssertPackageVersion(this.packagesProps, "Nerdbank.Streams", "2.9.109");
-		AssertPackageVersion(this.packagesProps, "System.IO.Pipelines", "6.0.3");
+		this.AssertPackageVersion("Nerdbank.Streams", "2.9.109");
+		this.AssertPackageVersion("System.IO.Pipelines", "6.0.3");
 	}
 
 	[Fact]
@@ -72,9 +74,9 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		};
 
 		await this.ExecuteCommandAsync();
-		AssertPackageVersion(this.packagesProps, "StreamJsonRpc", "2.13.33");
-		AssertPackageVersion(this.packagesProps, "Microsoft.VisualStudio.Threading", "17.1.46");
-		AssertPackageVersion(this.packagesProps, "Microsoft.VisualStudio.Validation", "17.0.53");
+		this.AssertPackageVersion("StreamJsonRpc", "2.13.33");
+		this.AssertPackageVersion("Microsoft.VisualStudio.Threading", "17.1.46");
+		this.AssertPackageVersion("Microsoft.VisualStudio.Validation", "17.0.53");
 	}
 
 	[Fact]
@@ -93,21 +95,44 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		};
 
 		await this.ExecuteCommandAsync();
-		AssertPackageVersion(this.packagesProps, "StreamJsonRpc", "2.13.33");
-		AssertPackageVersion(this.packagesProps, "Newtonsoft.Json", "13.0.2");
+		this.AssertPackageVersion("StreamJsonRpc", "2.13.33");
+		this.AssertPackageVersion("Newtonsoft.Json", "13.0.2");
+	}
+
+	[Fact]
+	public async Task PreserveMSBuildVersionProperties()
+	{
+		this.Command = new()
+		{
+			PackageId = "Nerdbank.Streams",
+			PackageVersion = "2.9.112",
+			TargetFramework = "netstandard2.0",
+			Path = this.StagingDirectory,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		// Assert that the version was effectively changed.
+		this.AssertPackageVersion("Nerdbank.Streams", "2.9.112");
+
+		// Assert that it was done without removing the property reference.
+		this.AssertPackageVersion("Nerdbank.Streams", "$(NerdbankStreamsVersion)", compareUnevaluatedValue: true);
 	}
 
 	protected override async Task ExecuteCommandAsync()
 	{
 		Verify.Operation(this.Command is not null, $"Set {nameof(this.Command)} first.");
-		bool topLevelItemDefined = MSBuild.FindItem(this.packagesProps, "PackageVersion", this.Command.PackageId) is not null;
+		bool topLevelItemDefined = MSBuild.FindItem(this.consumingProj, "PackageVersion", this.Command.PackageId) is not null;
 
 		await base.ExecuteCommandAsync();
 
 		this.packagesProps.ReevaluateIfNecessary();
+		this.consumingProj.ReevaluateIfNecessary();
 
 		// Assert that the package version itself was updated, if it existed previously.
 		// If it did not exist previously, we should *not* have added it.
-		AssertPackageVersion(this.packagesProps, this.Command.PackageId, topLevelItemDefined || this.Command.Explode ? this.Command.PackageVersion : null);
+		this.AssertPackageVersion(this.Command.PackageId, topLevelItemDefined || this.Command.Explode ? this.Command.PackageVersion : null);
 	}
+
+	protected void AssertPackageVersion(string id, string? version, bool compareUnevaluatedValue = false) => AssertPackageVersion(this.consumingProj, id, version, compareUnevaluatedValue);
 }

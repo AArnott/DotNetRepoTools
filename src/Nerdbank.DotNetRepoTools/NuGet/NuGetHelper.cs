@@ -3,6 +3,8 @@
 
 using System.CommandLine;
 using System.CommandLine.IO;
+using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
@@ -25,14 +27,17 @@ internal class NuGetHelper
 {
 	internal const string PackageVersionItemType = "PackageVersion";
 	internal const string VersionMetadata = "Version";
+	private static readonly Regex VersionPropertyReference = new(@"^\$\(([\w_]+)\)$");
+	private readonly MSBuild msbuild;
 
 	internal NuGetHelper(MSBuild msbuild, IConsole console, string projectPath)
-		: this(console, OpenOrCreateSandboxProject(msbuild, projectPath))
+		: this(msbuild, console, OpenOrCreateSandboxProject(msbuild, projectPath))
 	{
 	}
 
-	internal NuGetHelper(IConsole console, Project project)
+	internal NuGetHelper(MSBuild msbuild, IConsole console, Project project)
 	{
+		this.msbuild = msbuild;
 		this.Console = console;
 		this.Project = project;
 		this.NuGetSettings = Settings.LoadDefaultSettings(project.FullPath);
@@ -150,13 +155,15 @@ internal class NuGetHelper
 				this.Project.ReevaluateIfNecessary();
 				item = MSBuild.FindItem(this.Project, PackageVersionItemType, id);
 				Assumes.NotNull(item);
+				changed = true;
 			}
 			else
 			{
-				return changed;
+				return false;
 			}
 		}
 
+		string? nameOfChangedProperty = null;
 		string oldVersion = item.GetMetadataValue(VersionMetadata);
 		VersionRange? oldVersionParsed = oldVersion.Length > 0 ? VersionRange.Parse(oldVersion) : null;
 		VersionRange? newVersionParsed = VersionRange.Parse(version);
@@ -169,13 +176,39 @@ internal class NuGetHelper
 			}
 			else
 			{
-				versionMetadata.Value = ProjectCollection.Escape(version);
+				if (VersionPropertyReference.Match(versionMetadata.Value) is Match { Success: true } match)
+				{
+					// This version is defined by an MSBuild property. Find that property definition and update it instead.
+					string propertyName = match.Groups[1].Value;
+					ProjectPropertyElement propertyElement = this.Project.GetProperty(propertyName).Xml;
+					if (this.msbuild.CanChangeFile(propertyElement.ContainingProject.FullPath, this.Project.FullPath))
+					{
+						propertyElement.Value = ProjectCollection.Escape(version);
+						nameOfChangedProperty = propertyName;
+					}
+				}
+
+				if (nameOfChangedProperty is null)
+				{
+					versionMetadata.Value = ProjectCollection.Escape(version);
+				}
 			}
 
 			changed = true;
 		}
 
-		this.Console.WriteLine(oldVersion.Length == 0 ? $"{id} {version}" : $"{id} {oldVersion} -> {version}");
+		if (changed)
+		{
+			this.Console.Write(id);
+			this.Console.Write(oldVersion.Length == 0 ? $" {version}" : $" {oldVersion} -> {version}");
+			if (nameOfChangedProperty is not null)
+			{
+				this.Console.Write($" ({nameOfChangedProperty})");
+			}
+
+			this.Console.WriteLine(string.Empty);
+		}
+
 		return changed;
 	}
 

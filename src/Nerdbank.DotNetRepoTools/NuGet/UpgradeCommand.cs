@@ -109,6 +109,10 @@ public class UpgradeCommand : MSBuildCommandBase
 			versionsUpdated--;
 			this.Console.WriteLine($"No version spec for {this.PackageId} was found. It will not be added, but its dependencies that do have versions specified will be updated where necessary to avoid downgrade warnings as if it were present.");
 		}
+		else
+		{
+			nuget.Project.ReevaluateIfNecessary();
+		}
 
 		NuGetFramework nugetFramework = NuGetFramework.Parse(this.TargetFramework);
 		List<NuGetFramework> targetFrameworks = new() { nugetFramework };

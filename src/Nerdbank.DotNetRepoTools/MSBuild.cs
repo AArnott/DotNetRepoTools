@@ -2,10 +2,14 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.Collections.Immutable;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using System.IO.Enumeration;
 using System.Xml;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
 using Nerdbank.DotNetRepoTools.NuGet;
+using Newtonsoft.Json.Linq;
 
 namespace Nerdbank.DotNetRepoTools;
 
@@ -14,9 +18,22 @@ namespace Nerdbank.DotNetRepoTools;
 /// </summary>
 public class MSBuild : IDisposable
 {
+	private readonly Dictionary<string, bool> filesThatMayBeChanged = new(StringComparer.OrdinalIgnoreCase);
+	private string? repoRoot;
+
 	static MSBuild()
 	{
 		MSBuildLocator.EnsureLoaded();
+	}
+
+	/// <summary>
+	/// Gets or sets the path to the repo root directory or otherwise the directory above which no file changes should ever be persisted.
+	/// This will always end with a directory separator character.
+	/// </summary>
+	public string? RepoRoot
+	{
+		get => this.repoRoot;
+		set => this.repoRoot = EnsureTrailingSlash(value);
 	}
 
 	internal ProjectCollection ProjectCollection { get; } = new();
@@ -95,9 +112,18 @@ public class MSBuild : IDisposable
 	/// </summary>
 	public void ReloadEverything()
 	{
+		string? originatingLocation = this.ProjectCollection.LoadedProjects.FirstOrDefault()?.FullPath;
+		if (originatingLocation is null)
+		{
+			return;
+		}
+
 		foreach (ProjectRootElement pre in this.EnumerateLoadedXml())
 		{
-			pre.Reload();
+			if (File.Exists(pre.FullPath) && this.CanChangeFile(pre.FullPath, originatingLocation))
+			{
+				pre.Reload(throwIfUnsavedChanges: false);
+			}
 		}
 	}
 
@@ -119,6 +145,55 @@ public class MSBuild : IDisposable
 			project.AddItemFast("PackageReference", packageVersion.EvaluatedInclude);
 		}
 	}
+
+	internal bool CanChangeFile(string path, string originatingLocation)
+	{
+		if (this.filesThatMayBeChanged.TryGetValue(path, out bool cachedResult))
+		{
+			return cachedResult;
+		}
+
+		if (this.RepoRoot is not null && path.StartsWith(this.RepoRoot, StringComparison.OrdinalIgnoreCase))
+		{
+			cachedResult = true;
+		}
+
+		if (!cachedResult)
+		{
+			// Look for a git repo
+			for (string? subpath = Path.GetDirectoryName(path); subpath is not null; subpath = Path.GetDirectoryName(subpath))
+			{
+				string gitLocation = Path.Combine(subpath, ".git");
+				if (File.Exists(gitLocation) || Directory.Exists(gitLocation))
+				{
+					// We found the root of a repo. It should be safe to change the file.
+					cachedResult = true;
+					break;
+				}
+			}
+		}
+
+		if (!cachedResult)
+		{
+			// If the file to be changed is in the same directory as the originating location,
+			// or a direct ancestor, or a descendant, then we're safe.
+			// Basically, don't change files that are in cousin directories,
+			// lest we change something under Program Files.
+			string? changedDirectory = Path.GetDirectoryName(path);
+			string? originatingDirectory = Directory.Exists(originatingLocation) ? originatingLocation : Path.GetDirectoryName(originatingLocation);
+			if (changedDirectory is not null && originatingDirectory is not null)
+			{
+				originatingDirectory = EnsureTrailingSlash(originatingDirectory);
+				cachedResult |= path.StartsWith(originatingDirectory, StringComparison.OrdinalIgnoreCase) || originatingDirectory.StartsWith(changedDirectory, StringComparison.OrdinalIgnoreCase);
+			}
+		}
+
+		this.filesThatMayBeChanged.Add(path, cachedResult);
+		return cachedResult;
+	}
+
+	[return: NotNullIfNotNull(nameof(path))]
+	private static string? EnsureTrailingSlash(string? path) => path is null || path.EndsWith(Path.DirectorySeparatorChar) ? path : path + Path.DirectorySeparatorChar;
 
 	private IEnumerable<ProjectRootElement> EnumerateLoadedXml()
 	{
