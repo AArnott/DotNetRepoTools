@@ -99,15 +99,18 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		this.AssertPackageVersion("Newtonsoft.Json", "13.0.2");
 	}
 
-	[Fact]
-	public async Task PreserveMSBuildVersionProperties()
+	[Theory, PairwiseData]
+	public async Task PreserveMSBuildVersionProperties(bool preserveProperties)
 	{
+		HashSet<string> disregardVersionProperties = new(StringComparer.OrdinalIgnoreCase);
+		disregardVersionProperties.Add(preserveProperties ? "ABC" : "NerdbankStreamsVersion");
 		this.Command = new()
 		{
 			PackageId = "Nerdbank.Streams",
 			PackageVersion = "2.9.112",
 			TargetFramework = "netstandard2.0",
 			Path = this.StagingDirectory,
+			DisregardVersionProperties = disregardVersionProperties,
 		};
 
 		await this.ExecuteCommandAsync();
@@ -116,7 +119,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		this.AssertPackageVersion("Nerdbank.Streams", "2.9.112");
 
 		// Assert that it was done without removing the property reference.
-		this.AssertPackageVersion("Nerdbank.Streams", "$(NerdbankStreamsVersion)", compareUnevaluatedValue: true);
+		this.AssertPackageVersion("Nerdbank.Streams", preserveProperties ? "$(NerdbankStreamsVersion)" : "2.9.112", compareUnevaluatedValue: true);
 	}
 
 	protected override async Task ExecuteCommandAsync()

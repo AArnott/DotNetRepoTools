@@ -136,7 +136,7 @@ internal class NuGetHelper
 		return restoreTargetGraph;
 	}
 
-	internal bool SetPackageVersion(string id, string version, bool addIfMissing = true, bool allowDowngrade = true)
+	internal bool SetPackageVersion(string id, string version, bool addIfMissing = true, bool allowDowngrade = true, HashSet<string>? disregardVersionProperties = null)
 	{
 		ProjectRootElement? directoryPackagesPropsXml = this.Project.Imports.FirstOrDefault(i => string.Equals(Path.GetFileName(i.ImportedProject.FullPath), "Directory.Packages.props", StringComparison.OrdinalIgnoreCase)).ImportedProject;
 		if (directoryPackagesPropsXml is null)
@@ -180,11 +180,14 @@ internal class NuGetHelper
 				{
 					// This version is defined by an MSBuild property. Find that property definition and update it instead.
 					string propertyName = match.Groups[1].Value;
-					ProjectPropertyElement propertyElement = this.Project.GetProperty(propertyName).Xml;
-					if (this.msbuild.CanChangeFile(propertyElement.ContainingProject.FullPath, this.Project.FullPath))
+					if (disregardVersionProperties is null || !disregardVersionProperties.Contains(propertyName))
 					{
-						propertyElement.Value = ProjectCollection.Escape(version);
-						nameOfChangedProperty = propertyName;
+						ProjectPropertyElement propertyElement = this.Project.GetProperty(propertyName).Xml;
+						if (this.msbuild.CanChangeFile(propertyElement.ContainingProject.FullPath, this.Project.FullPath))
+						{
+							propertyElement.Value = ProjectCollection.Escape(version);
+							nameOfChangedProperty = propertyName;
+						}
 					}
 				}
 
@@ -212,7 +215,7 @@ internal class NuGetHelper
 		return changed;
 	}
 
-	internal async Task<int> CorrectDowngradeIssuesAsync(NuGetFramework framework, PackageReference? hypotheticalPackageReference, CancellationToken cancellationToken)
+	internal async Task<int> CorrectDowngradeIssuesAsync(NuGetFramework framework, PackageReference? hypotheticalPackageReference, HashSet<string>? disregardVersionProperties, CancellationToken cancellationToken)
 	{
 		int versionsUpdated = 0;
 		bool fixesApplied = true;
@@ -236,7 +239,7 @@ internal class NuGetHelper
 			fixesApplied = false;
 			foreach (DowngradeResult<RemoteResolveResult> conflict in restoreGraph.AnalyzeResult.Downgrades)
 			{
-				if (this.SetPackageVersion(conflict.DowngradedFrom.Key.Name, conflict.DowngradedFrom.Key.VersionRange.OriginalString))
+				if (this.SetPackageVersion(conflict.DowngradedFrom.Key.Name, conflict.DowngradedFrom.Key.VersionRange.OriginalString, disregardVersionProperties: disregardVersionProperties))
 				{
 					fixesApplied = true;
 					versionsUpdated++;

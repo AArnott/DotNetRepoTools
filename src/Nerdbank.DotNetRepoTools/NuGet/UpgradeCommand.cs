@@ -61,6 +61,11 @@ public class UpgradeCommand : MSBuildCommandBase
 	public bool Explode { get; init; }
 
 	/// <summary>
+	/// Gets the set of version properties to disregard when updating package versions that were previously defined by properties.
+	/// </summary>
+	public HashSet<string>? DisregardVersionProperties { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+	/// <summary>
 	/// Creates the command.
 	/// </summary>
 	/// <returns>The command.</returns>
@@ -71,6 +76,7 @@ public class UpgradeCommand : MSBuildCommandBase
 		Option<FileSystemInfo> pathOption = new Option<FileSystemInfo>("--path", "The path to the project or repo to upgrade.") { IsRequired = !File.Exists(DirectoryPackagesPropsFileName) }.ExistingOnly();
 		Option<string> frameworkOption = new Option<string>(new[] { "--framework", "-f" }, () => "netstandard2.0", "The target framework used to evaluate package dependencies.");
 		Option<bool> explodeOption = new("--explode", "Add PackageVersion items for every transitive dependency, so that they can be added as direct project dependencies as versions are pre-specified.");
+		Option<string[]> disregardVersionPropertiesOption = new("--disregard-version-properties", "Specifies one or more MSBuild properties that may be used to define a PackageVersion item's Version attribute that should no longer be referenced. This may be useful when properties have been used for multiple packages and their continued use is problematic because the packages now need their own distinct versions.") { AllowMultipleArgumentsPerToken = true };
 
 		Command command = new("upgrade", "Upgrade a package dependency, and all transitive dependencies such that no package downgrade warnings occur.")
 		{
@@ -79,6 +85,7 @@ public class UpgradeCommand : MSBuildCommandBase
 			pathOption,
 			frameworkOption,
 			explodeOption,
+			disregardVersionPropertiesOption,
 		};
 		command.SetHandler(ctxt => new UpgradeCommand(ctxt)
 		{
@@ -87,6 +94,7 @@ public class UpgradeCommand : MSBuildCommandBase
 			Path = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Environment.CurrentDirectory,
 			TargetFramework = ctxt.ParseResult.GetValueForOption(frameworkOption)!,
 			Explode = ctxt.ParseResult.GetValueForOption(explodeOption),
+			DisregardVersionProperties = ctxt.ParseResult.GetValueForOption(disregardVersionPropertiesOption)?.ToHashSet(StringComparer.OrdinalIgnoreCase),
 		}.ExecuteAndDisposeAsync());
 
 		return command;
@@ -103,7 +111,7 @@ public class UpgradeCommand : MSBuildCommandBase
 		}
 
 		int versionsUpdated = 1;
-		bool topLevelExists = nuget.SetPackageVersion(this.PackageId, this.PackageVersion, addIfMissing: false);
+		bool topLevelExists = nuget.SetPackageVersion(this.PackageId, this.PackageVersion, addIfMissing: false, disregardVersionProperties: this.DisregardVersionProperties);
 		if (!topLevelExists)
 		{
 			versionsUpdated--;
@@ -125,7 +133,7 @@ public class UpgradeCommand : MSBuildCommandBase
 		RestoreTargetGraph restoreGraph = await nuget.GetRestoreTargetGraphAsync(new[] { topLevelReference }, targetFrameworks, this.CancellationToken);
 		foreach (GraphItem<RemoteResolveResult>? item in restoreGraph.Flattened.Where(i => i.Key.Type == LibraryType.Package))
 		{
-			if (nuget.SetPackageVersion(item.Key.Name, item.Key.Version.ToFullString(), addIfMissing: this.Explode, allowDowngrade: false))
+			if (nuget.SetPackageVersion(item.Key.Name, item.Key.Version.ToFullString(), addIfMissing: this.Explode, allowDowngrade: false, disregardVersionProperties: this.DisregardVersionProperties))
 			{
 				versionsUpdated++;
 			}
