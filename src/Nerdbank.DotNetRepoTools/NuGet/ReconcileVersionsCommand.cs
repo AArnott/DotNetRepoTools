@@ -50,7 +50,7 @@ public class ReconcileVersionsCommand : MSBuildCommandBase
 	internal static Command CreateCommand()
 	{
 		Option<FileSystemInfo> pathOption = new Option<FileSystemInfo>("--path", "The path to the project or repo to resolve version issues with.").ExistingOnly();
-		Option<string> frameworkOption = new Option<string>("--framework", () => "netstandard2.0", "The target framework used to evaluate package dependencies.");
+		Option<string> frameworkOption = new Option<string>(new[] { "--framework", "-f" }, () => "netstandard2.0", "The target framework used to evaluate package dependencies.");
 		Option<string[]> disregardVersionPropertiesOption = new("--disregard-version-properties", "Specifies one or more MSBuild properties that may be used to define a PackageVersion item's Version attribute that should no longer be referenced. This may be useful when properties have been used for multiple packages and their continued use is problematic because the packages now need their own distinct versions.") { AllowMultipleArgumentsPerToken = true };
 
 		Command command = new("reconcile-versions", "Resolves all package downgrade warnings.")
