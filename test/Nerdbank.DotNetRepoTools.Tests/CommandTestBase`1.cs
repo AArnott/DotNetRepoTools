@@ -6,6 +6,8 @@ using Microsoft;
 public abstract class CommandTestBase<TCommand> : TestBase
 	where TCommand : CommandBase
 {
+	protected const string DirectoryPackagesPropsFileName = "Directory.Packages.props";
+
 	protected CommandTestBase(ITestOutputHelper logger)
 		: base(logger)
 	{

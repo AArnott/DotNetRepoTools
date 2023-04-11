@@ -158,20 +158,8 @@ public class MSBuild : IDisposable
 			cachedResult = true;
 		}
 
-		if (!cachedResult)
-		{
-			// Look for a git repo
-			for (string? subpath = Path.GetDirectoryName(path); subpath is not null; subpath = Path.GetDirectoryName(subpath))
-			{
-				string gitLocation = Path.Combine(subpath, ".git");
-				if (File.Exists(gitLocation) || Directory.Exists(gitLocation))
-				{
-					// We found the root of a repo. It should be safe to change the file.
-					cachedResult = true;
-					break;
-				}
-			}
-		}
+		// If we're in a git repo, it should be safe to change the file.
+		cachedResult |= CommandBase.FindGitRepoRoot(Path.GetDirectoryName(path)) is not null;
 
 		if (!cachedResult)
 		{

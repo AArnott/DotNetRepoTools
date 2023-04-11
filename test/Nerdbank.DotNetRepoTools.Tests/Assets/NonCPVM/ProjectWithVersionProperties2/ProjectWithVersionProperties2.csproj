@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis" Version="$(MicrosoftCodeAnalysisVersion)" />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="$(MicrosoftCodeAnalysisBannedApiAnalyzersVersion)" PrivateAssets="all" />
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.5.119" PrivateAssets="all" />
+    <PackageReference Include="IsExternalInit" Version="$(IsExternalInitVersion)" />
+  </ItemGroup>
+</Project>

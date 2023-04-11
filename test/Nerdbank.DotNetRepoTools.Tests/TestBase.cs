@@ -7,7 +7,7 @@ using Microsoft.Build.Evaluation;
 
 public abstract class TestBase : IAsyncLifetime
 {
-	private const string AssetsPrefix = "Assets.";
+	private const string AssetsPrefix = "Assets/";
 
 	static TestBase()
 	{
@@ -43,7 +43,7 @@ public abstract class TestBase : IAsyncLifetime
 
 	internal static Stream GetAsset(string assetName)
 	{
-		return Assembly.GetExecutingAssembly().GetManifestResourceStream($"{AssetsPrefix}{assetName.Replace('/', '.')}")
+		return Assembly.GetExecutingAssembly().GetManifestResourceStream(TransformAssetNameToStreamName(assetName))
 			?? throw new ArgumentException($"No resource named {assetName} found under the Assets directory of the test project.");
 	}
 
@@ -97,6 +97,13 @@ public abstract class TestBase : IAsyncLifetime
 		}
 	}
 
+	/// <summary>
+	/// Writes one asset to disk for a test.
+	/// </summary>
+	/// <param name="assetName">The path to the asset, relative to the test project's Assets directory. If <see langword="null" />, <see cref="StagingDirectory"/> will be used.</param>
+	/// <param name="baseDirectory">The path to the directory to save the asset to. If the asset is in a subdirectory under Assets, that relative path will be reconstructed onto this path.</param>
+	/// <param name="cancellationToken">A cancellation token.</param>
+	/// <returns>The absolute path to the created file.</returns>
 	protected async Task<string> PlaceAssetAsync(string assetName, string? baseDirectory = null, CancellationToken cancellationToken = default)
 	{
 		baseDirectory ??= this.StagingDirectory;
@@ -114,4 +121,50 @@ public abstract class TestBase : IAsyncLifetime
 
 		return targetFilePath;
 	}
+
+	/// <summary>
+	/// Writes all assets to disk that are defined under a given directory.
+	/// </summary>
+	/// <param name="assetSubDirectory">The path to the subdirectory under Assets, relative to the test project's Assets directory.</param>
+	/// <param name="baseDirectory">The path to the directory to save the files to. Any relative paths from the Assets directory will be reconstructed onto this path. If <see langword="null" />, <see cref="StagingDirectory"/> will be used.</param>
+	/// <param name="cancellationToken">A cancellation token.</param>
+	/// <returns>The absolute path to the base directory under which the assets were created.</returns>
+	protected async Task<string> PlaceAssetsAsync(string assetSubDirectory, string? baseDirectory = null, CancellationToken cancellationToken = default)
+	{
+		baseDirectory ??= this.StagingDirectory;
+
+		string streamNamePrefix = TransformAssetNameToStreamName(assetSubDirectory);
+		foreach (string embeddedStreamName in Assembly.GetExecutingAssembly().GetManifestResourceNames())
+		{
+			if (!embeddedStreamName.StartsWith(streamNamePrefix, StringComparison.Ordinal))
+			{
+				continue;
+			}
+
+			string targetFilePath = Path.Combine(baseDirectory, embeddedStreamName.Substring(AssetsPrefix.Length));
+			string? targetDirectory = Path.GetDirectoryName(targetFilePath);
+			if (targetDirectory is not null)
+			{
+				Directory.CreateDirectory(targetDirectory);
+			}
+
+			using Stream assetStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(embeddedStreamName)!;
+			using FileStream targetFile = File.Create(targetFilePath);
+			this.TempFiles.Add(targetFilePath);
+			await assetStream.CopyToAsync(targetFile, cancellationToken);
+		}
+
+		return baseDirectory;
+	}
+
+	protected void LogFileContent(string path)
+	{
+		this.Logger.WriteLine($"Content of file: {path}");
+		this.Logger.WriteLine("-----------------");
+		this.Logger.WriteLine(File.ReadAllText(path));
+		this.Logger.WriteLine("-----------------");
+		this.Logger.WriteLine(string.Empty);
+	}
+
+	private static string TransformAssetNameToStreamName(string assetName) => $"{AssetsPrefix}{assetName.Replace('\\', '/')}";
 }

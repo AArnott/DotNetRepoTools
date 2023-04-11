@@ -24,6 +24,7 @@ internal class NuGetCommand
 			ReconcileVersionsCommand.CreateCommand(),
 			UpgradeCommand.CreateCommand(),
 			TrimCommand.CreateCommand(),
+			ManagePackageVersionsCentrally.CreateCommand(),
 		};
 
 		return nuget;

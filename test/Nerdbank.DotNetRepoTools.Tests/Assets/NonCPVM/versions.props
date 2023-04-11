@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <MicrosoftCodeAnalysisVersion>4.5.0-2.22567.8</MicrosoftCodeAnalysisVersion>
+    <MicrosoftCodeAnalysisBannedApiAnalyzersVersion>3.3.2</MicrosoftCodeAnalysisBannedApiAnalyzersVersion>
+
+    <!-- This property is deliberately NOT specified to test references to undefined properties. -->
+    <!--<IsExternalInitVersion>1.0.0</IsExternalInitVersion>-->
+  </PropertyGroup>
+</Project>

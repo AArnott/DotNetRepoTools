@@ -10,6 +10,8 @@ namespace Nerdbank.DotNetRepoTools;
 /// </summary>
 public abstract class MSBuildCommandBase : CommandBase
 {
+	private protected const string DirectoryPackagesPropsFileName = "Directory.Packages.props";
+
 	private bool msbuildOwned = true;
 	private MSBuild msbuild = new();
 
