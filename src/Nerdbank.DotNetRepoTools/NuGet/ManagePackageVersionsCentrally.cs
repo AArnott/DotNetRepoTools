@@ -120,7 +120,7 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 		Project project;
 		try
 		{
-			project = this.MSBuild.GetProject(projectPath);
+			project = this.MSBuild.GetProject(projectPath, ProjectLoadSettings.IgnoreMissingImports | ProjectLoadSettings.IgnoreInvalidImports);
 		}
 		catch (InvalidProjectFileException ex)
 		{

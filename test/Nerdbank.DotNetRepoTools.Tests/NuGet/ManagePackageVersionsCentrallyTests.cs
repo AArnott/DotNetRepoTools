@@ -8,6 +8,8 @@ namespace NuGet;
 
 public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackageVersionsCentrally>
 {
+	private const ProjectLoadSettings DefaultProjectLoadSettings = ProjectLoadSettings.IgnoreMissingImports | ProjectLoadSettings.IgnoreInvalidImports;
+
 	public ManagePackageVersionsCentrallyTests(ITestOutputHelper logger)
 		: base(logger)
 	{
@@ -48,7 +50,7 @@ public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackage
 
 		this.LogFileContent(this.Command.DirectoryPackagesPropsPath);
 
-		Project projectWithVersionNumbers = this.MSBuild.GetProject(this.Command.Path);
+		Project projectWithVersionNumbers = this.MSBuild.GetProject(this.Command.Path, DefaultProjectLoadSettings);
 		this.AssertPackageVersionItemsAreUsed(projectWithVersionNumbers);
 	}
 
@@ -70,7 +72,7 @@ public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackage
 
 		foreach (string projectFile in Directory.EnumerateFiles(Path.Combine(this.StagingDirectory, @"NonCPVM"), "*.csproj", SearchOption.AllDirectories))
 		{
-			Project project = this.MSBuild.GetProject(projectFile);
+			Project project = this.MSBuild.GetProject(projectFile, DefaultProjectLoadSettings);
 			this.AssertPackageVersionItemsAreUsed(project);
 		}
 	}

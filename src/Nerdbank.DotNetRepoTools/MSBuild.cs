@@ -75,10 +75,11 @@ public class MSBuild : IDisposable
 	/// Gets a project evaluation for a given path.
 	/// </summary>
 	/// <param name="projectFile">The project's full path.</param>
+	/// <param name="projectLoadSettings">Settings to apply when loading the project, if it has not already been loaded.</param>
 	/// <returns>The project.</returns>
-	public Project GetProject(string projectFile)
+	public Project GetProject(string projectFile, ProjectLoadSettings projectLoadSettings = ProjectLoadSettings.Default)
 	{
-		return this.ProjectCollection.GetLoadedProjects(Path.GetFullPath(projectFile)).FirstOrDefault() ?? this.ProjectCollection.LoadProject(projectFile);
+		return this.ProjectCollection.GetLoadedProjects(Path.GetFullPath(projectFile)).FirstOrDefault() ?? new Project(projectFile, null, null, this.ProjectCollection, projectLoadSettings);
 	}
 
 	/// <summary>
