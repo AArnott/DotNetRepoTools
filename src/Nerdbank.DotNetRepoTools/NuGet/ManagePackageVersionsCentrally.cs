@@ -131,7 +131,7 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 
 		directoryPackagesProps.ReevaluateIfNecessary();
 		int versionOverrides = 0;
-		foreach (ProjectItem packageReference in project.GetItems("PackageReference"))
+		foreach (ProjectItem packageReference in project.GetItemsIgnoringCondition("PackageReference"))
 		{
 			// Only inspect items in the project file itself.
 			if (packageReference.Xml.ContainingProject != project.Xml.ContainingProject)

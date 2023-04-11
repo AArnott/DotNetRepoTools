@@ -82,7 +82,7 @@ public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackage
 		Assert.Equal("true", project.GetPropertyValue("ManagePackageVersionsCentrally"), ignoreCase: true);
 		try
 		{
-			foreach (ProjectItem item in project.GetItems("PackageReference"))
+			foreach (ProjectItem item in project.GetItemsIgnoringCondition("PackageReference"))
 			{
 				if (item.IsImported)
 				{
