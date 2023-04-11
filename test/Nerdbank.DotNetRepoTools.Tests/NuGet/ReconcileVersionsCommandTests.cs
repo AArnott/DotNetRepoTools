@@ -20,7 +20,7 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 		await base.InitializeAsync();
 
 		await this.SynthesizeAllMSBuildAssetsAsync();
-		this.packagesProps = this.MSBuild.GetProject(Path.Combine(this.StagingDirectory, "Directory.Packages.props"));
+		this.packagesProps = this.MSBuild.GetProject(Path.Combine(this.StagingDirectory, DirectoryPackagesPropsFileName));
 	}
 
 	[Fact]

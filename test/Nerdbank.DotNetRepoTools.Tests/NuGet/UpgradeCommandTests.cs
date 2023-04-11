@@ -23,7 +23,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 
 		await this.SynthesizeAllMSBuildAssetsAsync();
 		this.consumingProj = this.MSBuild.SynthesizeVolatileProject(Path.Combine(this.StagingDirectory, "repotools.csproj"));
-		this.packagesProps = this.MSBuild.GetProject(Path.Combine(this.StagingDirectory, "Directory.Packages.props"));
+		this.packagesProps = this.MSBuild.GetProject(Path.Combine(this.StagingDirectory, DirectoryPackagesPropsFileName));
 	}
 
 	[Fact]

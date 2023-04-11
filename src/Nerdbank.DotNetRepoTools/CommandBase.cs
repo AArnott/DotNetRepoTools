@@ -99,6 +99,27 @@ public abstract class CommandBase : IDisposable
 	}
 
 	/// <summary>
+	/// Finds the root of the git repository.
+	/// </summary>
+	/// <param name="startingPath">An optional starting path for the search that is expected to exist within a git repo. If <see langword="null" />, <see cref="Environment.CurrentDirectory"/> will be used.</param>
+	/// <returns>The path to the root of the git repo, or <see langword="null"/> if none was found.</returns>
+	internal static string? FindGitRepoRoot(string? startingPath = null)
+	{
+		// Look for a git repo
+		for (string? subpath = startingPath ?? Environment.CurrentDirectory; subpath is not null; subpath = Path.GetDirectoryName(subpath))
+		{
+			string gitLocation = Path.Combine(subpath, ".git");
+			if (File.Exists(gitLocation) || Directory.Exists(gitLocation))
+			{
+				// We found the root of a repo. It should be safe to change the file.
+				return subpath;
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>
 	/// Implements the actual command implementation.
 	/// </summary>
 	/// <returns>A task that tracks command completion.</returns>

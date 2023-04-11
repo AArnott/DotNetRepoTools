@@ -17,8 +17,6 @@ namespace Nerdbank.DotNetRepoTools.NuGet;
 /// </summary>
 public class UpgradeCommand : MSBuildCommandBase
 {
-	private const string DirectoryPackagesPropsFileName = "Directory.Packages.props";
-
 	/// <summary>
 	/// Initializes a new instance of the <see cref="UpgradeCommand"/> class.
 	/// </summary>

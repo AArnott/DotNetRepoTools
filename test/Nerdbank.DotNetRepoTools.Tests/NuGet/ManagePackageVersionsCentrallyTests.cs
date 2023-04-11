@@ -1,0 +1,108 @@
+﻿// Copyright (c) Andrew Arnott. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+using Microsoft.Build.Evaluation;
+using Nerdbank.DotNetRepoTools.NuGet;
+
+namespace NuGet;
+
+public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackageVersionsCentrally>
+{
+	public ManagePackageVersionsCentrallyTests(ITestOutputHelper logger)
+		: base(logger)
+	{
+	}
+
+	public override async Task InitializeAsync()
+	{
+		await base.InitializeAsync();
+		await this.PlaceAssetsAsync("NonCPVM");
+	}
+
+	[Fact]
+	public async Task PathDoesNotExist()
+	{
+		this.Command = new()
+		{
+			DirectoryPackagesPropsPath = Path.Combine(this.StagingDirectory, DirectoryPackagesPropsFileName),
+			Path = Path.Combine(this.StagingDirectory, "DoesNotExist"),
+		};
+
+		await this.ExecuteCommandAsync();
+		Assert.NotEqual(0, this.Command.ExitCode);
+	}
+
+	[Fact]
+	public async Task MigrateOneProject()
+	{
+		this.Command = new()
+		{
+			DirectoryPackagesPropsPath = Path.Combine(this.StagingDirectory, DirectoryPackagesPropsFileName),
+			Path = Path.Combine(this.StagingDirectory, @"NonCPVM", "ProjectWithVersionNumbers", "ProjectWithVersionNumbers.csproj"),
+		};
+
+		await this.ExecuteCommandAsync();
+		Assert.Equal(0, this.Command.ExitCode);
+
+		Assert.True(File.Exists(this.Command.DirectoryPackagesPropsPath));
+
+		this.LogFileContent(this.Command.DirectoryPackagesPropsPath);
+
+		Project projectWithVersionNumbers = this.MSBuild.GetProject(this.Command.Path);
+		this.AssertPackageVersionItemsAreUsed(projectWithVersionNumbers);
+	}
+
+	[Fact]
+	public async Task MigrateWholeRepo()
+	{
+		this.Command = new()
+		{
+			DirectoryPackagesPropsPath = Path.Combine(this.StagingDirectory, DirectoryPackagesPropsFileName),
+			Path = this.StagingDirectory,
+		};
+
+		await this.ExecuteCommandAsync();
+		Assert.Equal(0, this.Command.ExitCode);
+
+		Assert.True(File.Exists(this.Command.DirectoryPackagesPropsPath));
+
+		this.LogFileContent(this.Command.DirectoryPackagesPropsPath);
+
+		foreach (string projectFile in Directory.EnumerateFiles(Path.Combine(this.StagingDirectory, @"NonCPVM"), "*.csproj", SearchOption.AllDirectories))
+		{
+			Project project = this.MSBuild.GetProject(projectFile);
+			this.AssertPackageVersionItemsAreUsed(project);
+		}
+	}
+
+	private void AssertPackageVersionItemsAreUsed(Project project)
+	{
+		this.LogFileContent(project.FullPath);
+
+		Assert.Equal("true", project.GetPropertyValue("ManagePackageVersionsCentrally"), ignoreCase: true);
+		try
+		{
+			foreach (ProjectItem item in project.GetItems("PackageReference"))
+			{
+				if (item.IsImported)
+				{
+					continue;
+				}
+
+				try
+				{
+					Assert.Null(item.GetMetadata("Version"));
+					Assert.NotEqual(string.Empty, MSBuild.FindItem(project, "PackageVersion", item.EvaluatedInclude)?.GetMetadata("Version")?.UnevaluatedValue ?? string.Empty);
+				}
+				catch (Exception ex)
+				{
+					throw new Exception($"Failed while inspecting item \"{item.EvaluatedInclude}\".", ex);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			throw new Exception($"Failed while inspecting project file \"{project.FullPath}\".", ex);
+		}
+	}
+}
