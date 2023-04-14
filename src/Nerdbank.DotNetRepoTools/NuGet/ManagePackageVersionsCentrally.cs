@@ -4,6 +4,7 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.IO;
+using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Exceptions;
 
@@ -57,7 +58,7 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 		command.SetHandler(ctxt =>
 		{
 			string path = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Environment.CurrentDirectory;
-			string? repoRoot = FindGitRepoRoot(path);
+			string? repoRoot = ctxt.ParseResult.GetValueForOption(repoBaseOption)?.FullName ?? FindGitRepoRoot(path);
 			if (repoRoot is null)
 			{
 				throw new Exception("No git repo found and --repo-root was not specified.");
@@ -161,7 +162,14 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 					}
 				}
 
-				packageReference.RemoveMetadata(packageReferenceVersionMetadata.Name);
+				// Take care how we remove the Version metadata, because it may be in an imported file or as part of an Update item.
+				ProjectElementContainer parent = packageReferenceVersionMetadata.Xml.Parent;
+				parent.RemoveChild(packageReferenceVersionMetadata.Xml);
+				if (parent is ProjectItemElement { Update.Length: > 0, HasMetadata: false })
+				{
+					// The Update item has nothing left to offer. Remove it.
+					parent.Parent.RemoveChild(parent);
+				}
 			}
 		}
 
