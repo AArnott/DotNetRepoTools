@@ -70,10 +70,14 @@ public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackage
 
 		this.LogFileContent(this.Command.DirectoryPackagesPropsPath);
 
-		foreach (string projectFile in Directory.EnumerateFiles(Path.Combine(this.StagingDirectory, @"NonCPVM"), "*.csproj", SearchOption.AllDirectories))
+		string[] extensions = new[] { "*.csproj", "*.props", "*.targets" };
+		foreach (string extension in extensions)
 		{
-			Project project = this.MSBuild.GetProject(projectFile, DefaultProjectLoadSettings);
-			this.AssertPackageVersionItemsAreUsed(project);
+			foreach (string projectFile in Directory.EnumerateFiles(Path.Combine(this.StagingDirectory, @"NonCPVM"), extension, SearchOption.AllDirectories))
+			{
+				Project project = this.MSBuild.GetProject(projectFile, DefaultProjectLoadSettings);
+				this.AssertPackageVersionItemsAreUsed(project);
+			}
 		}
 	}
 
@@ -81,7 +85,12 @@ public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackage
 	{
 		this.LogFileContent(project.FullPath);
 
-		Assert.Equal("true", project.GetPropertyValue("ManagePackageVersionsCentrally"), ignoreCase: true);
+		bool isRealProject = project.FullPath.EndsWith("proj", StringComparison.OrdinalIgnoreCase);
+		if (isRealProject)
+		{
+			Assert.Equal("true", project.GetPropertyValue("ManagePackageVersionsCentrally"), ignoreCase: true);
+		}
+
 		try
 		{
 			foreach (ProjectItem item in project.GetItemsIgnoringCondition("PackageReference"))
@@ -94,7 +103,10 @@ public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackage
 				try
 				{
 					Assert.Null(item.GetMetadata("Version"));
-					Assert.NotEqual(string.Empty, MSBuild.FindItem(project, "PackageVersion", item.EvaluatedInclude)?.GetMetadata("Version")?.UnevaluatedValue ?? string.Empty);
+					if (isRealProject)
+					{
+						Assert.NotEqual(string.Empty, MSBuild.FindItem(project, "PackageVersion", item.EvaluatedInclude)?.GetMetadata("Version")?.UnevaluatedValue ?? string.Empty);
+					}
 				}
 				catch (Exception ex)
 				{
