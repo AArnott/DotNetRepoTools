@@ -130,12 +130,18 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 			return;
 		}
 
+		if (project.Imports.Count == 0)
+		{
+			this.Console.Error.WriteLine($"Project \"{relativeProjectPath}\" does not import anything. Did you run restore? That's important to do first.");
+		}
+
 		directoryPackagesProps.ReevaluateIfNecessary();
+		HashSet<ProjectRootElement> changedFiles = new();
 		int versionOverrides = 0;
 		foreach (ProjectItem packageReference in project.GetItemsIgnoringCondition("PackageReference"))
 		{
-			// Only inspect items in the project file itself.
-			if (packageReference.Xml.ContainingProject != project.Xml.ContainingProject)
+			// Only inspect items within the root path.
+			if (!packageReference.Xml.ContainingProject.FullPath.StartsWith(this.Path))
 			{
 				continue;
 			}
@@ -162,6 +168,8 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 					}
 				}
 
+				changedFiles.Add(packageReferenceVersionMetadata.Xml.ContainingProject);
+
 				// Take care how we remove the Version metadata, because it may be in an imported file or as part of an Update item.
 				ProjectElementContainer parent = packageReferenceVersionMetadata.Xml.Parent;
 				parent.RemoveChild(packageReferenceVersionMetadata.Xml);
@@ -173,10 +181,20 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 			}
 		}
 
-		if (project.IsDirty)
+		if (project.IsDirty || changedFiles.Count > 0)
 		{
 			string versionOverrideWarning = versionOverrides > 0 ? $" (with {versionOverrides} version overrides)" : string.Empty;
 			this.Console.WriteLine($"Migrated \"{relativeProjectPath}\"{versionOverrideWarning}");
+
+			foreach (ProjectRootElement changedFile in changedFiles)
+			{
+				if (changedFile != project.Xml)
+				{
+					this.Console.WriteLine($"  {System.IO.Path.GetRelativePath(System.IO.Path.GetDirectoryName(this.DirectoryPackagesPropsPath)!, changedFile.FullPath)}");
+					changedFile.Save();
+				}
+			}
+
 			project.Save();
 			directoryPackagesProps.Save();
 		}
