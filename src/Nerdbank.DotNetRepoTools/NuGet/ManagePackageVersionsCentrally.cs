@@ -58,7 +58,7 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 		command.SetHandler(ctxt =>
 		{
 			string path = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Environment.CurrentDirectory;
-			string? repoRoot = FindGitRepoRoot(path);
+			string? repoRoot = ctxt.ParseResult.GetValueForOption(repoBaseOption)?.FullName ?? FindGitRepoRoot(path);
 			if (repoRoot is null)
 			{
 				throw new Exception("No git repo found and --repo-root was not specified.");
