@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Enumeration;
 using System.Xml;
+using Microsoft;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
 using Nerdbank.DotNetRepoTools.NuGet;
@@ -47,6 +48,7 @@ public class MSBuild : IDisposable
 	/// <returns>The item, if found.</returns>
 	public static ProjectItem? FindItem(Project project, string itemType, string include)
 	{
+		Requires.NotNull(project);
 		return project.GetItemsByEvaluatedInclude(include).FirstOrDefault(i => string.Equals(itemType, i.ItemType, StringComparison.OrdinalIgnoreCase));
 	}
 

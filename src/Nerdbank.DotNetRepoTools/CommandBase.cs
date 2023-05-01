@@ -4,6 +4,7 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.IO;
+using Microsoft;
 
 namespace Nerdbank.DotNetRepoTools;
 
@@ -27,6 +28,8 @@ public abstract class CommandBase : IDisposable
 	/// <param name="invocationContext">The command line invocation context, from which to parse the arguments and get other interaction objects.</param>
 	protected CommandBase(InvocationContext invocationContext)
 	{
+		Requires.NotNull(invocationContext);
+
 		this.InvocationContext = invocationContext;
 		this.Console = invocationContext.Console;
 		this.CancellationToken = invocationContext.GetCancellationToken();
