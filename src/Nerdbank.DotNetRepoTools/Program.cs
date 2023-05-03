@@ -4,6 +4,7 @@
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Parsing;
+using Nerdbank.DotNetRepoTools.Git;
 using Nerdbank.DotNetRepoTools.NuGet;
 
 namespace Nerdbank.DotNetRepoTools;
@@ -18,6 +19,7 @@ internal static class Program
 		RootCommand root = new($"A CLI tool with commands to help maintain .NET codebases.")
 		{
 			NuGetCommand.CreateCommand(),
+			GitCommand.CreateCommand(),
 		};
 		root.Name = "repotools";
 		return new CommandLineBuilder(root)
