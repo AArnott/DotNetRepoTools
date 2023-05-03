@@ -26,16 +26,6 @@ internal abstract class GitCommandBase : CommandBase
 
 		using CancellationTokenSource cts = new(1000);
 
-		// Skip completions when used in the presentation in the -? usage doc.
-		// Per https://github.com/dotnet/command-line-api/issues/2185, we cannot tell when we're in that context,
-		// so guess based on no tokens.
-		if (context.ParseResult.Tokens.Count == 0)
-		{
-			yield break;
-		}
-
-		const int maxResults = 20;
-		int results = 0;
 		foreach (string branch in QueryGit("git branch -a --format %(refname)", cts.Token))
 		{
 			string? simpleName = null;
@@ -51,10 +41,6 @@ internal abstract class GitCommandBase : CommandBase
 			if (simpleName?.StartsWith(context.WordToComplete, StringComparison.OrdinalIgnoreCase) is true)
 			{
 				yield return simpleName;
-				if (++results == maxResults)
-				{
-					break;
-				}
 			}
 		}
 	}

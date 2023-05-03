@@ -34,7 +34,10 @@ internal class TrimCommand : GitCommandBase
 	/// <returns>The command.</returns>
 	internal static Command CreateCommand()
 	{
-		Argument<string> mergedIntoArg = new("mergeTarget", "Branches become trimmable after they have been merged into this ref. Typically origin/main or similar.");
+		Argument<string> mergedIntoArg = new("mergeTarget", "Branches become trimmable after they have been merged into this ref. Typically origin/main or similar.")
+		{
+			HelpName = "mergeTarget",
+		};
 		mergedIntoArg.AddCompletions(GitRefCompletions);
 		Command command = new("trim", "Removes local branches that have already been merged into some target ref.")
 		{
