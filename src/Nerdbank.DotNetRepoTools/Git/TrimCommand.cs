@@ -59,7 +59,7 @@ internal class TrimCommand : GitCommandBase
 			if (branch.StartsWith(LocalBranchPrefix))
 			{
 				string branchName = branch.Substring(LocalBranchPrefix.Length);
-				await ExecGitAsync($"git branch -d {branchName}", this.CancellationToken);
+				await ExecGitAsync($"git branch -D {branchName}", this.CancellationToken);
 			}
 		}
 	}
