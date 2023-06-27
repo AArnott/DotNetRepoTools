@@ -34,12 +34,12 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 	/// <summary>
 	/// Gets the path to the project file or repo to upgrade.
 	/// </summary>
-	required public string Path { get; init; }
+	public required string Path { get; init; }
 
 	/// <summary>
 	/// Gets the path to the Directory.Packages.props file.
 	/// </summary>
-	required public string DirectoryPackagesPropsPath { get; init; }
+	public required string DirectoryPackagesPropsPath { get; init; }
 
 	/// <summary>
 	/// Creates the command.

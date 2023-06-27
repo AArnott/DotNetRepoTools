@@ -21,7 +21,7 @@ internal class TrimCommand : GitCommandBase
 	/// Gets the ref of the object that is the ultimate object of any branch.
 	/// Once a branch has merged into this ref, it can be deleted.
 	/// </summary>
-	required public string MergedInto { get; init; }
+	public required string MergedInto { get; init; }
 
 	/// <summary>
 	/// Gets a value indicating whether to delete local branches that have been merged into <see cref="MergedInto"/>.

@@ -36,22 +36,22 @@ public class UpgradeCommand : MSBuildCommandBase
 	/// <summary>
 	/// Gets the ID of the package to be upgraded.
 	/// </summary>
-	required public string PackageId { get; init; }
+	public required string PackageId { get; init; }
 
 	/// <summary>
 	/// Gets the version to upgrade the package identified by <see cref="PackageId"/> to.
 	/// </summary>
-	required public string PackageVersion { get; init; }
+	public required string PackageVersion { get; init; }
 
 	/// <summary>
 	/// Gets the path to the project file or repo to upgrade.
 	/// </summary>
-	required public string Path { get; init; }
+	public required string Path { get; init; }
 
 	/// <summary>
 	/// Gets the target framework used to evaluate package dependencies.
 	/// </summary>
-	required public string TargetFramework { get; init; }
+	public required string TargetFramework { get; init; }
 
 	/// <summary>
 	/// Gets a value indicating whether all transitive dependencies will be explicitly added (not just updated as needed if they exist).
