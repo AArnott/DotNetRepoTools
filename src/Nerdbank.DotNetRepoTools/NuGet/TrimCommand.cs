@@ -17,7 +17,7 @@ internal class TrimCommand : MSBuildCommandBase
 	{
 	}
 
-	required public string Project { get; init; }
+	public required string Project { get; init; }
 
 	/// <summary>
 	/// Creates the command.

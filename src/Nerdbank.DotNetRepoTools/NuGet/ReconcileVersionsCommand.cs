@@ -31,12 +31,12 @@ public class ReconcileVersionsCommand : MSBuildCommandBase
 	/// <summary>
 	/// Gets the path to the project file to reconcile versions for.
 	/// </summary>
-	required public string ProjectPath { get; init; }
+	public required string ProjectPath { get; init; }
 
 	/// <summary>
 	/// Gets the target framework used to evaluate package dependencies.
 	/// </summary>
-	required public string TargetFramework { get; init; }
+	public required string TargetFramework { get; init; }
 
 	/// <summary>
 	/// Gets the set of version properties to disregard when updating package versions that were previously defined by properties.
