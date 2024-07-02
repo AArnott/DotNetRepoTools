@@ -3,6 +3,7 @@
 
 using System.CommandLine;
 using System.CommandLine.Invocation;
+using System.Text;
 
 namespace Nerdbank.DotNetRepoTools.Git;
 
@@ -24,9 +25,10 @@ internal class TrimCommand : GitCommandBase
 	public required string MergedInto { get; init; }
 
 	/// <summary>
-	/// Gets a value indicating whether to delete local branches that have been merged into <see cref="MergedInto"/>.
+	/// Gets a value indicating whether to merely identify branches that have been merged into <see cref="MergedInto"/>
+	/// rather than delete them.
 	/// </summary>
-	public bool TrimLocalBranches { get; init; }
+	public bool WhatIf { get; init; }
 
 	/// <summary>
 	/// Creates the command.
@@ -39,13 +41,15 @@ internal class TrimCommand : GitCommandBase
 			HelpName = "mergeTarget",
 		};
 		mergedIntoArg.AddCompletions(GitRefCompletions);
-		Command command = new("trim", "Removes local branches that have already been merged into some target ref.")
+		Command command = new("trim", "Removes local branches that have already been merged into some target ref. Squashed branches can sometimes also be detected.")
 		{
 			mergedIntoArg,
+			WhatIfOption,
 		};
 		command.SetHandler(ctxt => new TrimCommand(ctxt)
 		{
 			MergedInto = ctxt.ParseResult.GetValueForArgument(mergedIntoArg),
+			WhatIf = ctxt.ParseResult.GetValueForOption(WhatIfOption),
 		}.ExecuteAndDisposeAsync());
 
 		return command;
@@ -54,12 +58,64 @@ internal class TrimCommand : GitCommandBase
 	protected override async Task ExecuteCoreAsync()
 	{
 		const string LocalBranchPrefix = "refs/heads/";
+
+		List<string> branchesToDelete = [];
 		await foreach (string branch in QueryGitAsync($"git branch --merged {this.MergedInto} --format %(refname)", this.CancellationToken))
 		{
+			// Skip output such as "(HEAD detached at origin/main)"
 			if (branch.StartsWith(LocalBranchPrefix))
 			{
-				string branchName = branch.Substring(LocalBranchPrefix.Length);
-				await ExecGitAsync($"git branch -D {branchName}", this.CancellationToken);
+				branchesToDelete.Add(branch.Substring(LocalBranchPrefix.Length));
+			}
+		}
+
+		await foreach (string branch in QueryGitAsync($"git branch --no-merged {this.MergedInto} --format %(refname)", this.CancellationToken))
+		{
+			// Skip output such as "(HEAD detached at origin/main)"
+			if (branch.StartsWith(LocalBranchPrefix))
+			{
+				bool novelCommitsFound = false;
+				await foreach (string line in QueryGitAsync($"git cherry {this.MergedInto} {branch}", this.CancellationToken))
+				{
+					if (line.StartsWith("+"))
+					{
+						novelCommitsFound = true;
+						break;
+					}
+				}
+
+				if (!novelCommitsFound)
+				{
+					branchesToDelete.Add(branch.Substring(LocalBranchPrefix.Length));
+				}
+			}
+		}
+
+		branchesToDelete.Sort(StringComparer.OrdinalIgnoreCase);
+		if (this.WhatIf)
+		{
+			this.Console.WriteLine("The following branches are trimmable:");
+			foreach (string branch in branchesToDelete)
+			{
+				this.Console.WriteLine($"  {branch}");
+			}
+		}
+		else
+		{
+			StringBuilder branchListAsString = new();
+			const string DeleteBranchCommandPrefix = "git branch -D ";
+			while (branchesToDelete.Count > 0)
+			{
+				// Greedily delete many branches at once provided the command line doesn't get so long that it tends to fail.
+				branchListAsString.Clear();
+				while (branchesToDelete.Count > 0 && DeleteBranchCommandPrefix.Length + branchListAsString.Length + 1 + branchesToDelete[0].Length < 8192)
+				{
+					branchListAsString.Append(' ');
+					branchListAsString.Append(branchesToDelete[0]);
+					branchesToDelete.RemoveAt(0);
+				}
+
+				await ExecGitAsync($"{DeleteBranchCommandPrefix}{branchListAsString}", this.CancellationToken);
 			}
 		}
 	}
