@@ -14,6 +14,11 @@ namespace Nerdbank.DotNetRepoTools;
 public abstract class CommandBase : IDisposable
 {
 	/// <summary>
+	/// The <c>--what-if</c> option that can be used to preview the effects of a command without actually executing it.
+	/// </summary>
+	protected static readonly Option<bool> WhatIfOption = new("--what-if", "Prints what would be done without actually doing it.");
+
+	/// <summary>
 	/// Initializes a new instance of the <see cref="CommandBase"/> class
 	/// suitable for actually invoking the command.
 	/// </summary>

@@ -71,7 +71,7 @@ internal abstract class GitCommandBase : CommandBase
 		{
 			RedirectStandardOutput = true,
 		};
-		Process process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to spawn git.");
+		using Process process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to spawn git.");
 		using (cancellationToken.Register(() => process.Kill()))
 		{
 			string? line;
