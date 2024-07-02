@@ -5,11 +5,7 @@
 		<ToolCommandName>repo</ToolCommandName>
 		<PackAsTool>True</PackAsTool>
 		<Description>A CLI tool with commands to help maintain .NET codebases.</Description>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
-	<ItemGroup>
-		<None Include="$(RepoRootPath)README.md" Pack="true" PackagePath="" />
-	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Build" PrivateAssets="compile" ExcludeAssets="runtime" />
 		<PackageReference Include="Microsoft.Build.Locator" />
