@@ -2,7 +2,9 @@
 
 ***A CLI toolbox for repo maintenance***
 
-[![NuGet package](https://img.shields.io/nuget/v/Nerdbank.DotNetRepoTools.svg)](https://dev.azure.com/andrewarnott/OSS/_artifacts/feed/PublicCI/NuGet/Nerdbank.DotNetRepoTools)
+[![NuGet package](https://img.shields.io/nuget/v/Nerdbank.DotNetRepoTools.svg)](https://www.nuget.org/packages/Nerdbank.DotNetRepoTools)
+[![NuGet prerelease](https://img.shields.io/badge/nuget-prerelease-blue)](https://dev.azure.com/andrewarnott/OSS/_artifacts/feed/PublicCI/NuGet/Nerdbank.DotNetRepoTools)
+
 [![Build Status](https://dev.azure.com/andrewarnott/OSS/_apis/build/status/DotNetRepoTools/DotNetRepoTools?branchName=main)](https://dev.azure.com/andrewarnott/OSS/_build/latest?definitionId=74&branchName=main)
 
 ## Usage
@@ -11,7 +13,7 @@
 
 Install or upgrade this tool with the following command:
 
-    dotnet tool update -g Nerdbank.DotNetRepoTools --prerelease --add-source https://pkgs.dev.azure.com/andrewarnott/OSS/_packaging/PublicCI/nuget/v3/index.json
+    dotnet tool update -g Nerdbank.DotNetRepoTools
 
 ## Commands
 
