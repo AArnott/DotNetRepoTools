@@ -167,7 +167,8 @@ internal class NuGetHelper
 		string oldVersion = item.GetMetadataValue(VersionMetadata);
 		VersionRange? oldVersionParsed = oldVersion.Length > 0 ? VersionRange.Parse(oldVersion) : null;
 		VersionRange? newVersionParsed = VersionRange.Parse(version);
-		if (allowDowngrade || oldVersionParsed is null || oldVersionParsed.MinVersion < newVersionParsed.MinVersion)
+		if (allowDowngrade || oldVersionParsed is null ||
+		   (oldVersionParsed.MinVersion is not null && newVersionParsed.MinVersion is not null && oldVersionParsed.MinVersion < newVersionParsed.MinVersion))
 		{
 			ProjectMetadataElement? versionMetadata = item.Xml.Metadata.SingleOrDefault(m => string.Equals(m.Name, VersionMetadata, StringComparison.OrdinalIgnoreCase));
 			if (versionMetadata is null)
@@ -239,7 +240,8 @@ internal class NuGetHelper
 			fixesApplied = false;
 			foreach (DowngradeResult<RemoteResolveResult> conflict in restoreGraph.AnalyzeResult.Downgrades)
 			{
-				if (this.SetPackageVersion(conflict.DowngradedFrom.Key.Name, conflict.DowngradedFrom.Key.VersionRange.OriginalString, disregardVersionProperties: disregardVersionProperties))
+				if (conflict.DowngradedFrom.Key.VersionRange?.OriginalString is string originalVersion &&
+					this.SetPackageVersion(conflict.DowngradedFrom.Key.Name, originalVersion, disregardVersionProperties: disregardVersionProperties))
 				{
 					fixesApplied = true;
 					versionsUpdated++;
