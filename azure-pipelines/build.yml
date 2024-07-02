@@ -12,6 +12,8 @@ parameters:
 jobs:
 - job: Windows
   pool: ${{ parameters.windowsPool }}
+  variables:
+  - group: dotnetfoundation code signing
   steps:
   - checkout: self
     fetchDepth: 0 # avoid shallow clone so nbgv can do its work.
@@ -24,6 +26,7 @@ jobs:
   - template: dotnet.yml
     parameters:
       RunTests: ${{ parameters.RunTests }}
+      SignArtifacts: ${{ ne(variables['Build.Reason'], 'PullRequest') }}
 
 - job: Linux
   pool:
