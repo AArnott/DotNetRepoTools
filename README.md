@@ -32,7 +32,7 @@ Description:
   A CLI tool with commands to help maintain .NET codebases.
 
 Usage:
-  repo [command] [options]
+  repotools [command] [options]
 
 Options:
   --version       Show version information
@@ -40,6 +40,7 @@ Options:
 
 Commands:
   nuget  NuGet maintenance commands
+  git    Git repo maintenance workflows
 ```
 
 You can then drill in to reveal sub-commands:
@@ -51,14 +52,35 @@ Description:
   NuGet maintenance commands
 
 Usage:
-  repo nuget [command] [options]
+  repotools nuget [command] [options]
 
 Options:
   -?, -h, --help  Show help and usage information
 
 Commands:
-  upgrade <id> <version>  Upgrade a package dependency, and all transitive dependencies such that no package downgrade warnings occur.
-  trim <project>          Removes PackageReference items that are redundant because they are to packages that already appear as transitive dependencies.
+  reconcile-versions              Resolves all package downgrade warnings.
+  upgrade <id> <version>          Upgrade a package dependency, and all transitive dependencies such that no package downgrade warnings occur.
+  trim                            Removes PackageReference items that are redundant because they are to packages that already appear as transitive       
+                                  dependencies.
+  ManagePackageVersionsCentrally  Migrates a repo to use centralized package versions.
+```
+
+and
+
+```
+$ repo git -?
+
+Description:
+  Git repo maintenance workflows
+
+Usage:
+  repotools git [command] [options]
+
+Options:
+  -?, -h, --help  Show help and usage information
+
+Commands:
+  trim <mergeTarget>  Removes local branches that have already been merged into some target ref.
 ```
 
 ## Example usage
@@ -68,3 +90,7 @@ and update all transitive dependencies that also have versions specified in that
 to resolve package downgrade errors:
 
     repo nuget upgrade StreamJsonRpc 1.2.3
+
+Or the command I use most frequently, which cleans up all your stale local branches:
+
+    repo git trim origin/main
