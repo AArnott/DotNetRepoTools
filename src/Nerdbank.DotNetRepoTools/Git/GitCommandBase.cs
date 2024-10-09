@@ -1,8 +1,10 @@
 ﻿// Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System.CommandLine;
 using System.CommandLine.Completions;
 using System.CommandLine.Invocation;
+using System.CommandLine.IO;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
@@ -19,6 +21,11 @@ internal abstract class GitCommandBase : CommandBase
 	{
 	}
 
+	/// <summary>
+	/// Gets a value indicating whether to print the command lines of sub-processes spawned by the tool.
+	/// </summary>
+	public bool Verbose { get; init; }
+
 	protected static IEnumerable<string> GitRefCompletions(CompletionContext context)
 	{
 		const string LocalBranchPrefix = "refs/heads/";
@@ -26,7 +33,7 @@ internal abstract class GitCommandBase : CommandBase
 
 		using CancellationTokenSource cts = new(1000);
 
-		foreach (string branch in QueryGit("git branch -a --format %(refname)", cts.Token))
+		foreach (string branch in QueryGitHelper("branch -a --format %(refname)", cts.Token))
 		{
 			string? simpleName = null;
 			if (branch.StartsWith(LocalBranchPrefix))
@@ -45,28 +52,23 @@ internal abstract class GitCommandBase : CommandBase
 		}
 	}
 
-	protected static IEnumerable<string> QueryGit(string arguments, CancellationToken cancellationToken)
+	protected IEnumerable<string> QueryGit(string arguments, CancellationToken cancellationToken)
 	{
-		ProcessStartInfo psi = new("git", arguments)
+		if (this.Verbose)
 		{
-			RedirectStandardOutput = true,
-		};
-		using Process process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to spawn git.");
-		using (cancellationToken.Register(() => process.Kill()))
-		{
-			string? line;
-			while ((line = process.StandardOutput.ReadLine()) is not null)
-			{
-				yield return line;
-			}
-
-			process.WaitForExit(500);
-			process.Kill();
+			this.Console.Error.WriteLine($"git {arguments}");
 		}
+
+		return QueryGitHelper(arguments, cancellationToken);
 	}
 
-	protected static async IAsyncEnumerable<string> QueryGitAsync(string arguments, [EnumeratorCancellation] CancellationToken cancellationToken)
+	protected async IAsyncEnumerable<string> QueryGitAsync(string arguments, [EnumeratorCancellation] CancellationToken cancellationToken)
 	{
+		if (this.Verbose)
+		{
+			this.Console.Error.WriteLine($"git {arguments}");
+		}
+
 		ProcessStartInfo psi = new("git", arguments)
 		{
 			RedirectStandardOutput = true,
@@ -84,14 +86,39 @@ internal abstract class GitCommandBase : CommandBase
 		}
 	}
 
-	protected static async Task<int> ExecGitAsync(string arguments, CancellationToken cancellationToken)
+	protected async Task<int> ExecGitAsync(string arguments, CancellationToken cancellationToken)
 	{
+		if (this.Verbose)
+		{
+			this.Console.Error.WriteLine($"git {arguments}");
+		}
+
 		ProcessStartInfo psi = new("git", arguments);
 		Process process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to spawn git.");
 		using (cancellationToken.Register(() => process.Kill()))
 		{
 			await process.WaitForExitAsync(cancellationToken);
 			return process.ExitCode;
+		}
+	}
+
+	private static IEnumerable<string> QueryGitHelper(string arguments, CancellationToken cancellationToken)
+	{
+		ProcessStartInfo psi = new("git", arguments)
+		{
+			RedirectStandardOutput = true,
+		};
+		using Process process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to spawn git.");
+		using (cancellationToken.Register(() => process.Kill()))
+		{
+			string? line;
+			while ((line = process.StandardOutput.ReadLine()) is not null)
+			{
+				yield return line;
+			}
+
+			process.WaitForExit(500);
+			process.Kill();
 		}
 	}
 }

@@ -19,6 +19,11 @@ public abstract class CommandBase : IDisposable
 	protected static readonly Option<bool> WhatIfOption = new("--what-if", "Prints what would be done without actually doing it.");
 
 	/// <summary>
+	/// The --verbose option that should activate printing of spawned commands.
+	/// </summary>
+	protected static readonly Option<bool> VerboseOption = new("--verbose", "Prints the command lines of sub-processes spawned by the tool.");
+
+	/// <summary>
 	/// Initializes a new instance of the <see cref="CommandBase"/> class
 	/// suitable for actually invoking the command.
 	/// </summary>
