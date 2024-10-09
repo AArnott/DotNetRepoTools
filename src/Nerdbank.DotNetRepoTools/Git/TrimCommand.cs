@@ -45,11 +45,13 @@ internal class TrimCommand : GitCommandBase
 		{
 			mergedIntoArg,
 			WhatIfOption,
+			VerboseOption,
 		};
 		command.SetHandler(ctxt => new TrimCommand(ctxt)
 		{
 			MergedInto = ctxt.ParseResult.GetValueForArgument(mergedIntoArg),
 			WhatIf = ctxt.ParseResult.GetValueForOption(WhatIfOption),
+			Verbose = ctxt.ParseResult.GetValueForOption(VerboseOption),
 		}.ExecuteAndDisposeAsync());
 
 		return command;
@@ -60,7 +62,7 @@ internal class TrimCommand : GitCommandBase
 		const string LocalBranchPrefix = "refs/heads/";
 
 		List<string> branchesToDelete = [];
-		await foreach (string branch in QueryGitAsync($"git branch --merged {this.MergedInto} --format %(refname)", this.CancellationToken))
+		await foreach (string branch in this.QueryGitAsync($"branch --merged {this.MergedInto} --format %(refname)", this.CancellationToken))
 		{
 			// Skip output such as "(HEAD detached at origin/main)"
 			if (branch.StartsWith(LocalBranchPrefix))
@@ -69,13 +71,13 @@ internal class TrimCommand : GitCommandBase
 			}
 		}
 
-		await foreach (string branch in QueryGitAsync($"git branch --no-merged {this.MergedInto} --format %(refname)", this.CancellationToken))
+		await foreach (string branch in this.QueryGitAsync($"branch --no-merged {this.MergedInto} --format %(refname)", this.CancellationToken))
 		{
 			// Skip output such as "(HEAD detached at origin/main)"
 			if (branch.StartsWith(LocalBranchPrefix))
 			{
 				bool novelCommitsFound = false;
-				await foreach (string line in QueryGitAsync($"git cherry {this.MergedInto} {branch}", this.CancellationToken))
+				await foreach (string line in this.QueryGitAsync($"cherry {this.MergedInto} {branch}", this.CancellationToken))
 				{
 					if (line.StartsWith("+"))
 					{
@@ -103,7 +105,7 @@ internal class TrimCommand : GitCommandBase
 		else
 		{
 			StringBuilder branchListAsString = new();
-			const string DeleteBranchCommandPrefix = "git branch -D ";
+			const string DeleteBranchCommandPrefix = "branch -D ";
 			while (branchesToDelete.Count > 0)
 			{
 				// Greedily delete many branches at once provided the command line doesn't get so long that it tends to fail.
@@ -115,7 +117,7 @@ internal class TrimCommand : GitCommandBase
 					branchesToDelete.RemoveAt(0);
 				}
 
-				await ExecGitAsync($"{DeleteBranchCommandPrefix}{branchListAsString}", this.CancellationToken);
+				await this.ExecGitAsync($"{DeleteBranchCommandPrefix}{branchListAsString}", this.CancellationToken);
 			}
 		}
 	}
