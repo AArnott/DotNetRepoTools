@@ -10,7 +10,7 @@ resources:
       - auto-release
 
 variables:
-- group: Publishing secrets
+- group: Nerdbank publishing secrets
 
 jobs:
 - job: release
