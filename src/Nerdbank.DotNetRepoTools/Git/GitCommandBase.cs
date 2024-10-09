@@ -75,12 +75,12 @@ internal abstract class GitCommandBase : CommandBase
 		using (cancellationToken.Register(() => process.Kill()))
 		{
 			string? line;
-			while ((line = await process.StandardOutput.ReadLineAsync()) is not null)
+			while ((line = await process.StandardOutput.ReadLineAsync(cancellationToken)) is not null)
 			{
 				yield return line;
 			}
 
-			await process.WaitForExitAsync();
+			await process.WaitForExitAsync(cancellationToken);
 		}
 	}
 
@@ -90,7 +90,7 @@ internal abstract class GitCommandBase : CommandBase
 		Process process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to spawn git.");
 		using (cancellationToken.Register(() => process.Kill()))
 		{
-			await process.WaitForExitAsync();
+			await process.WaitForExitAsync(cancellationToken);
 			return process.ExitCode;
 		}
 	}
