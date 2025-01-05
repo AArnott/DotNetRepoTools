@@ -3,6 +3,11 @@
 	"extends": ["config:recommended"],
 	"semanticCommits": "disabled",
 	"labels": ["dependencies"],
+	"nuget": {
+		"ignorePaths": [
+			"test/Nerdbank.DotNetRepoTools.Tests/Assets/**"
+		]
+	},
 	"packageRules": [
 		{
 			"matchPackageNames": ["nbgv", "nerdbank.gitversioning"],
@@ -11,6 +16,11 @@
 		{
 			"matchPackageNames": ["xunit*"],
 			"groupName": "xunit"
+		},
+		{
+			"matchPackageNames": ["Microsoft.Build"],
+			"groupName": "MSBuild",
+			"allowedVersions": "[17.8,17.9)"
 		},
 		{
 			"matchDatasources": ["dotnet-version", "docker"],
