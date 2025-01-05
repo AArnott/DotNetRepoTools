@@ -36,14 +36,14 @@ Function Spawn-Tool($command, $commandArgs, $workingDirectory, $allowFailures) {
     }
 }
 
-$remoteBranch = & $PSScriptRoot\..\azure-pipelines\Get-LibTemplateBasis.ps1 -ErrorIfNotRelated
+$remoteBranch = & $PSScriptRoot\Get-LibTemplateBasis.ps1 -ErrorIfNotRelated
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
 $LibTemplateUrl = 'https://github.com/aarnott/Library.Template'
 Spawn-Tool 'git' ('fetch', $LibTemplateUrl, $remoteBranch)
-$SourceCommit = git rev-parse FETCH_HEAD
+$SourceCommit = Spawn-Tool 'git' ('rev-parse', 'FETCH_HEAD')
 $BaseBranch = Spawn-Tool 'git' ('branch', '--show-current')
 $SourceCommitUrl = "$LibTemplateUrl/commit/$SourceCommit"
 

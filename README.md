@@ -60,7 +60,7 @@ Options:
 Commands:
   reconcile-versions              Resolves all package downgrade warnings.
   upgrade <id> <version>          Upgrade a package dependency, and all transitive dependencies such that no package downgrade warnings occur.
-  trim                            Removes PackageReference items that are redundant because they are to packages that already appear as transitive       
+  trim                            Removes PackageReference items that are redundant because they are to packages that already appear as transitive
                                   dependencies.
   ManagePackageVersionsCentrally  Migrates a repo to use centralized package versions.
 ```
