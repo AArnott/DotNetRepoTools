@@ -81,8 +81,8 @@ jobs:
         obj/SignClient sign
         --baseDirectory '${{ runner.temp }}/deployables'
         --input '**/*'
-        --config '${{ github.workspace }}/azure-pipelines/SignClient.json'
-        --filelist '${{ github.workspace }}/azure-pipelines/signfiles.txt'
+        --config '${{ github.workspace }}/.github/SignClient.json'
+        --filelist '${{ github.workspace }}/.github/signfiles.txt'
         --user '${{ secrets.CODESIGN_USERNAME }}'
         --secret '${{ secrets.CODESIGN_SECRET }}'
         --name 'DotNetRepoTools'

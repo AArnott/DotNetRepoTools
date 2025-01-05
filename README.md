@@ -3,9 +3,8 @@
 ***A CLI toolbox for repo maintenance***
 
 [![NuGet package](https://img.shields.io/nuget/v/Nerdbank.DotNetRepoTools.svg)](https://www.nuget.org/packages/Nerdbank.DotNetRepoTools)
-[![NuGet prerelease](https://img.shields.io/badge/nuget-CI-blue)](https://dev.azure.com/andrewarnott/OSS/_artifacts/feed/PublicCI/NuGet/Nerdbank.DotNetRepoTools)
 
-[![Build Status](https://dev.azure.com/andrewarnott/OSS/_apis/build/status/DotNetRepoTools/DotNetRepoTools?branchName=main)](https://dev.azure.com/andrewarnott/OSS/_build/latest?definitionId=74&branchName=main)
+[![🏭 Build](https://github.com/AArnott/DotNetRepoTools/actions/workflows/build.yml/badge.svg)](https://github.com/AArnott/DotNetRepoTools/actions/workflows/build.yml)
 
 ## Usage
 
