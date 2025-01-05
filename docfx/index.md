@@ -4,6 +4,6 @@ _layout: landing
 
 # Overview
 
-This is your docfx landing page.
+DotNetRepoTools is a CLI tool that offers several commands that automate common workflows for developers, especially (but not exclusively) .NET developers.
 
-Click "Docs" across the top to get started.
+[Get started](docs/getting-started.md)

@@ -6,6 +6,10 @@
 
 [![🏭 Build](https://github.com/AArnott/DotNetRepoTools/actions/workflows/build.yml/badge.svg)](https://github.com/AArnott/DotNetRepoTools/actions/workflows/build.yml)
 
+## Documentation
+
+Check out our [full documentation](https://aarnott.github.io/DotNetRepoTools/docs/getting-started.html).
+
 ## Usage
 
 ### Acquisition
