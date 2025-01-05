@@ -15,7 +15,7 @@ public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackage
 	{
 	}
 
-	public override async Task InitializeAsync()
+	public override async ValueTask InitializeAsync()
 	{
 		await base.InitializeAsync();
 		await this.PlaceAssetsAsync("NonCPVM");

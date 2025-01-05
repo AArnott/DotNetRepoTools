@@ -3,4 +3,3 @@
 
 global using Nerdbank.DotNetRepoTools;
 global using Xunit;
-global using Xunit.Abstractions;

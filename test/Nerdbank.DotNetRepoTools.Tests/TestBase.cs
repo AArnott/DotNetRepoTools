@@ -29,16 +29,16 @@ public abstract class TestBase : IAsyncLifetime
 
 	internal TempFileCollection TempFiles { get; } = new();
 
-	public virtual Task InitializeAsync()
+	public virtual ValueTask InitializeAsync()
 	{
-		return Task.CompletedTask;
+		return ValueTask.CompletedTask;
 	}
 
-	public virtual Task DisposeAsync()
+	public virtual ValueTask DisposeAsync()
 	{
 		this.MSBuild.Dispose();
 		this.TempFiles.Dispose();
-		return Task.CompletedTask;
+		return ValueTask.CompletedTask;
 	}
 
 	internal static Stream GetAsset(string assetName)

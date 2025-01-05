@@ -15,7 +15,7 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 	{
 	}
 
-	public override async Task InitializeAsync()
+	public override async ValueTask InitializeAsync()
 	{
 		await base.InitializeAsync();
 
