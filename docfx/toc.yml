@@ -1,0 +1,5 @@
+items:
+- name: Docs
+  href: docs/
+- name: GitHub
+  href: https://github.com/AArnott/DotNetRepoTools

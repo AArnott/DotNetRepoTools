@@ -1,0 +1,32 @@
+{
+	"build": {
+		"content": [
+			{
+				"files": [
+					"**/*.{md,yml}"
+				],
+				"exclude": [
+					"_site/**"
+				]
+			}
+		],
+		"resource": [
+			{
+				"files": [
+					"images/**"
+				]
+			}
+		],
+		"output": "_site",
+		"template": [
+			"default",
+			"modern"
+		],
+		"globalMetadata": {
+			"_appName": "Nerdbank.DotNetRepoTools",
+			"_appTitle": "Nerdbank.DotNetRepoTools",
+			"_enableSearch": true,
+			"pdf": false
+		}
+	}
+}
