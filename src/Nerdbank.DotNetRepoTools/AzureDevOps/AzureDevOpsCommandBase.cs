@@ -114,6 +114,8 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		{
 			if (this.Verbose && canReadContent)
 			{
+				this.Console.WriteLine(string.Empty);
+				this.Console.WriteLine("RESPONSE:");
 				this.Console.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
 			}
 		}

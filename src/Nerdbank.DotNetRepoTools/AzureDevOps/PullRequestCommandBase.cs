@@ -21,6 +21,7 @@ internal abstract class PullRequestCommandBase : AzureDevOpsCommandBase
 		{
 			PullRequestCommentCommand.CreateCommand(),
 			PullRequestCreateCommand.CreateCommand(),
+			PullRequestPropertyCommand.CreateCommand(),
 		};
 
 		return command;
