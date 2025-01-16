@@ -4,6 +4,7 @@
 using System;
 using System.CommandLine;
 using System.CommandLine.Invocation;
+using System.CommandLine.IO;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 
@@ -11,7 +12,7 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal abstract class AzureDevOpsCommandBase : CommandBase
 {
-	protected static readonly Option<string> AccessTokenOption = new(["--access-token", "-t"], "The access token to use to authenticate against the AzDO REST API.");
+	protected static readonly Option<string> AccessTokenOption = new("--access-token", "The access token to use to authenticate against the AzDO REST API.");
 
 	protected static readonly Option<string> AccountOption = new("--account", "The AzDO account (organization).") { IsRequired = true };
 
@@ -68,11 +69,16 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		command.AddOption(RepoOption);
 	}
 
+	protected static string CamelCase(string value)
+	{
+		return value.Length == 0 ? string.Empty : (char.ToLower(value[0]) + value[1..]);
+	}
+
 	protected virtual HttpClient CreateHttpClient()
 	{
 		HttpClient result = new()
 		{
-			BaseAddress = new Uri($"https://dev.azure.com/{this.Account}/{this.Project}/_apis/git/repositories/{this.Repo}/"),
+			BaseAddress = new Uri($"https://dev.azure.com/{this.Account}/{this.Project}/_apis/git/repositories/{this.Repo}"),
 		};
 		if (this.AccessToken is not null)
 		{
@@ -95,5 +101,41 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 			this.Console.WriteLine(string.Empty);
 			this.Console.WriteLine(await request.Content.ReadAsStringAsync(this.CancellationToken));
 		}
+	}
+
+	protected virtual async Task<HttpResponseMessage?> SendAsync(HttpRequestMessage request, bool canReadContent)
+	{
+		if (this.WhatIf || this.Verbose)
+		{
+			await this.WriteWhatIfAsync(request);
+			if (this.WhatIf)
+			{
+				return null;
+			}
+		}
+
+		HttpResponseMessage response = await this.HttpClient.SendAsync(request);
+		if (response.IsSuccessStatusCode)
+		{
+			if (this.Verbose && canReadContent)
+			{
+				this.Console.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
+			}
+		}
+		else
+		{
+			this.Console.Error.WriteLine($"({(int)response.StatusCode} {response.StatusCode})");
+			if (canReadContent)
+			{
+				this.Console.Error.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
+			}
+
+			if (this.InvocationContext is not null)
+			{
+				this.InvocationContext.ExitCode = (int)response.StatusCode;
+			}
+		}
+
+		return response;
 	}
 }
