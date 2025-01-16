@@ -2,15 +2,11 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.Collections.Immutable;
-using System.ComponentModel;
-using System.Diagnostics.CodeAnalysis;
-using System.IO.Enumeration;
 using System.Xml;
 using Microsoft;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
 using Nerdbank.DotNetRepoTools.NuGet;
-using Newtonsoft.Json.Linq;
 
 namespace Nerdbank.DotNetRepoTools;
 

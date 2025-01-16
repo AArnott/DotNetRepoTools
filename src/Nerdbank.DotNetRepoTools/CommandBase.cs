@@ -1,9 +1,7 @@
 ﻿// Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using System.CommandLine;
-using System.CommandLine.Invocation;
-using System.CommandLine.IO;
+using System.Text;
 using Microsoft;
 
 namespace Nerdbank.DotNetRepoTools;
@@ -153,6 +151,22 @@ public abstract class CommandBase : IDisposable
 	{
 		command.AddOption(WhatIfOption);
 		command.AddOption(VerboseOption);
+	}
+
+	/// <summary>
+	/// Reads the standard input stream until it is closed and returns the content as a string.
+	/// </summary>
+	/// <returns>The text from STDIN.</returns>
+	protected static string ReadFromStandardIn()
+	{
+		string? line;
+		StringBuilder sb = new();
+		while ((line = System.Console.ReadLine()) is not null)
+		{
+			sb.AppendLine(line);
+		}
+
+		return sb.ToString();
 	}
 
 	/// <summary>

@@ -1,17 +1,14 @@
 ﻿// Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using System;
-using System.CommandLine;
-using System.CommandLine.Invocation;
-using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal abstract class AzureDevOpsCommandBase : CommandBase
 {
-	protected static readonly Option<string> AccessTokenOption = new(["--access-token", "-t"], "The access token to use to authenticate against the AzDO REST API.");
+	protected static readonly Option<string> AccessTokenOption = new("--access-token", "The access token to use to authenticate against the AzDO REST API.");
 
 	protected static readonly Option<string> AccountOption = new("--account", "The AzDO account (organization).") { IsRequired = true };
 
@@ -68,11 +65,16 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		command.AddOption(RepoOption);
 	}
 
+	protected static string CamelCase(string value)
+	{
+		return value.Length == 0 ? string.Empty : (char.ToLower(value[0]) + value[1..]);
+	}
+
 	protected virtual HttpClient CreateHttpClient()
 	{
 		HttpClient result = new()
 		{
-			BaseAddress = new Uri($"https://dev.azure.com/{this.Account}/{this.Project}/_apis/git/repositories/{this.Repo}/"),
+			BaseAddress = new Uri($"https://dev.azure.com/{this.Account}/{this.Project}/_apis/git/repositories/{this.Repo}"),
 		};
 		if (this.AccessToken is not null)
 		{
@@ -94,6 +96,56 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		{
 			this.Console.WriteLine(string.Empty);
 			this.Console.WriteLine(await request.Content.ReadAsStringAsync(this.CancellationToken));
+		}
+	}
+
+	protected virtual async Task<HttpResponseMessage?> SendAsync(HttpRequestMessage request, bool canReadContent)
+	{
+		if (this.WhatIf || this.Verbose)
+		{
+			await this.WriteWhatIfAsync(request);
+			if (this.WhatIf)
+			{
+				return null;
+			}
+		}
+
+		HttpResponseMessage response = await this.HttpClient.SendAsync(request);
+		if (response.IsSuccessStatusCode)
+		{
+			if (this.Verbose && canReadContent)
+			{
+				this.Console.WriteLine(string.Empty);
+				this.Console.WriteLine("RESPONSE:");
+				this.Console.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
+			}
+		}
+		else
+		{
+			this.ExitCode = (int)response.StatusCode;
+			this.Console.Error.WriteLine($"{(int)response.StatusCode} {response.StatusCode}");
+			if (canReadContent)
+			{
+				await this.PrintErrorMessageAsync(response);
+			}
+		}
+
+		return response;
+	}
+
+	protected virtual async Task PrintErrorMessageAsync(HttpResponseMessage? response)
+	{
+		if (response is { IsSuccessStatusCode: false })
+		{
+			if (response.Content.Headers.ContentType?.MediaType == "application/json")
+			{
+				ErrorResponseWithMessage? errorResponse = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.ErrorResponseWithMessage, this.CancellationToken);
+				this.Console.Error.WriteLine(errorResponse?.Message ?? string.Empty);
+			}
+			else
+			{
+				this.Console.Error.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
+			}
 		}
 	}
 }
