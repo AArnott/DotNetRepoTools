@@ -75,12 +75,7 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 		};
 
 		HttpResponseMessage? response = await this.SendAsync(requestMessage, canReadContent: false);
-		if (response is { IsSuccessStatusCode: false })
-		{
-			this.Console.Error.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
-			return;
-		}
-
+		await this.PrintErrorMessageAsync(response);
 		if (response is { IsSuccessStatusCode: true })
 		{
 			if (response.Content.Headers.ContentType?.MediaType == "application/json")

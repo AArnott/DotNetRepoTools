@@ -11,6 +11,7 @@ namespace Nerdbank.DotNetRepoTools;
 /// </summary>
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(PullRequest))]
+[JsonSerializable(typeof(ErrorResponseWithMessage))]
 internal partial class SourceGenerationContext : JsonSerializerContext
 {
 }

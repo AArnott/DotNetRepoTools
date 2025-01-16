@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
@@ -121,18 +122,30 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		}
 		else
 		{
-			this.Console.Error.WriteLine($"({(int)response.StatusCode} {response.StatusCode})");
+			this.ExitCode = (int)response.StatusCode;
+			this.Console.Error.WriteLine($"{(int)response.StatusCode} {response.StatusCode}");
 			if (canReadContent)
 			{
-				this.Console.Error.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
-			}
-
-			if (this.InvocationContext is not null)
-			{
-				this.InvocationContext.ExitCode = (int)response.StatusCode;
+				await this.PrintErrorMessageAsync(response);
 			}
 		}
 
 		return response;
+	}
+
+	protected virtual async Task PrintErrorMessageAsync(HttpResponseMessage? response)
+	{
+		if (response is { IsSuccessStatusCode: false })
+		{
+			if (response.Content.Headers.ContentType?.MediaType == "application/json")
+			{
+				ErrorResponseWithMessage? errorResponse = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.ErrorResponseWithMessage, this.CancellationToken);
+				this.Console.Error.WriteLine(errorResponse?.Message ?? string.Empty);
+			}
+			else
+			{
+				this.Console.Error.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
+			}
+		}
 	}
 }
