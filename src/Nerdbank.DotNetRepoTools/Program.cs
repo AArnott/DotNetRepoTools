@@ -4,6 +4,7 @@
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Parsing;
+using Nerdbank.DotNetRepoTools.AzureDevOps;
 using Nerdbank.DotNetRepoTools.Git;
 using Nerdbank.DotNetRepoTools.NuGet;
 
@@ -20,6 +21,7 @@ internal static class Program
 		{
 			NuGetCommand.CreateCommand(),
 			GitCommand.CreateCommand(),
+			AzureDevOpsCommandBase.CreateCommand(),
 		};
 		root.Name = "repotools";
 		return new CommandLineBuilder(root)
