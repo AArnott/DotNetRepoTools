@@ -21,11 +21,6 @@ internal abstract class GitCommandBase : CommandBase
 	{
 	}
 
-	/// <summary>
-	/// Gets a value indicating whether to print the command lines of sub-processes spawned by the tool.
-	/// </summary>
-	public bool Verbose { get; init; }
-
 	protected static IEnumerable<string> GitRefCompletions(CompletionContext context)
 	{
 		const string LocalBranchPrefix = "refs/heads/";

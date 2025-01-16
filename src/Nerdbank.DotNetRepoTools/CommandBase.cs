@@ -43,6 +43,9 @@ public abstract class CommandBase : IDisposable
 		this.InvocationContext = invocationContext;
 		this.Console = invocationContext.Console;
 		this.CancellationToken = invocationContext.GetCancellationToken();
+
+		this.WhatIf = invocationContext.ParseResult.GetValueForOption(WhatIfOption);
+		this.Verbose = invocationContext.ParseResult.GetValueForOption(VerboseOption);
 	}
 
 	/// <summary>
@@ -59,6 +62,16 @@ public abstract class CommandBase : IDisposable
 	/// Gets the console to interact with during execution of the command.
 	/// </summary>
 	public IConsole Console { get; init; } = new TestConsole();
+
+	/// <summary>
+	/// Gets a value indicating whether to merely print the likely effects rather than apply them.
+	/// </summary>
+	public bool WhatIf { get; init; }
+
+	/// <summary>
+	/// Gets a value indicating whether to print the command lines of sub-processes spawned by the tool.
+	/// </summary>
+	public bool Verbose { get; init; }
 
 	/// <summary>
 	/// Gets the command line invocation context, when available.
@@ -130,6 +143,16 @@ public abstract class CommandBase : IDisposable
 		}
 
 		return null;
+	}
+
+	/// <summary>
+	/// Adds common options to the specified command.
+	/// </summary>
+	/// <param name="command">The command to add options to.</param>
+	protected static void AddCommonOptions(Command command)
+	{
+		command.AddOption(WhatIfOption);
+		command.AddOption(VerboseOption);
 	}
 
 	/// <summary>

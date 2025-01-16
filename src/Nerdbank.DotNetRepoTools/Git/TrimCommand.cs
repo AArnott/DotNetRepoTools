@@ -25,12 +25,6 @@ internal class TrimCommand : GitCommandBase
 	public required string MergedInto { get; init; }
 
 	/// <summary>
-	/// Gets a value indicating whether to merely identify branches that have been merged into <see cref="MergedInto"/>
-	/// rather than delete them.
-	/// </summary>
-	public bool WhatIf { get; init; }
-
-	/// <summary>
 	/// Creates the command.
 	/// </summary>
 	/// <returns>The command.</returns>
@@ -44,14 +38,11 @@ internal class TrimCommand : GitCommandBase
 		Command command = new("trim", "Removes local branches that have already been merged into some target ref. Squashed branches can sometimes also be detected.")
 		{
 			mergedIntoArg,
-			WhatIfOption,
-			VerboseOption,
 		};
+		AddCommonOptions(command);
 		command.SetHandler(ctxt => new TrimCommand(ctxt)
 		{
 			MergedInto = ctxt.ParseResult.GetValueForArgument(mergedIntoArg),
-			WhatIf = ctxt.ParseResult.GetValueForOption(WhatIfOption),
-			Verbose = ctxt.ParseResult.GetValueForOption(VerboseOption),
 		}.ExecuteAndDisposeAsync());
 
 		return command;

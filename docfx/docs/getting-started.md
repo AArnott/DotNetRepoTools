@@ -48,6 +48,7 @@ Options:
 Commands:
   nuget  NuGet maintenance commands
   git    Git repo maintenance workflows
+  azdo   Azure DevOps operations
 ```
 
 You can then drill in to reveal sub-commands:
