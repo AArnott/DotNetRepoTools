@@ -8,13 +8,13 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal abstract class AzureDevOpsCommandBase : CommandBase
 {
-	protected static readonly Option<string> AccessTokenOption = new("--access-token", "The access token to use to authenticate against the AzDO REST API.");
+	protected static readonly OptionOrEnvVar AccessTokenOption = new("--access-token", "SYSTEM_ACCESSTOKEN", description: "The access token to use to authenticate against the AzDO REST API.");
 
-	protected static readonly Option<string> AccountOption = new("--account", "The AzDO account (organization).") { IsRequired = true };
+	protected static readonly OptionOrEnvVar AccountOption = new("--account", "SYSTEM_COLLECTIONID", isRequired: true, "The AzDO account (organization).");
 
-	protected static readonly Option<string> ProjectOption = new("--project", "The AzDO project.") { IsRequired = true };
+	protected static readonly OptionOrEnvVar ProjectOption = new("--project", "SYSTEM_TEAMPROJECT", isRequired: true, "The AzDO project.");
 
-	protected static readonly Option<string> RepoOption = new("--repo", "The name of the repo.") { IsRequired = true };
+	protected static readonly OptionOrEnvVar RepoOption = new("--repo", "BUILD_REPOSITORY_NAME", isRequired: true, "The name of the repo.");
 
 	private HttpClient? httpClient;
 
