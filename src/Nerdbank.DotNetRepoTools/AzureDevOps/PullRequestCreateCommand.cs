@@ -44,7 +44,7 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 
 	internal static new Command CreateCommand()
 	{
-		Command command = new("create", "Creates a new pull request")
+		Command command = new("create", "Creates a new pull request.")
 		{
 			TitleOption,
 			DescriptionOption,
