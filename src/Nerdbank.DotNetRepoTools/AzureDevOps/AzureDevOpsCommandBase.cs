@@ -9,7 +9,7 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal abstract class AzureDevOpsCommandBase : CommandBase
 {
-	protected static readonly OptionOrEnvVar AccessTokenOption = new("--access-token", "SYSTEM_ACCESSTOKEN", description: "The access token to use to authenticate against the AzDO REST API.");
+	protected static readonly OptionOrEnvVar AccessTokenOption = new("--access-token", "SYSTEM_ACCESSTOKEN", isRequired: true, description: "The access token to use to authenticate against the AzDO REST API.");
 
 	protected static readonly OptionOrEnvVar AccountOption = new("--account", "SYSTEM_COLLECTIONURI", isRequired: true, "The AzDO account (organization) or URI (e.g. \"fabrikamfiber\" or \"https://dev.azure.com/fabrikamfiber/\".");
 
