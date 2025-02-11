@@ -20,7 +20,7 @@
 		{
 			"matchPackageNames": ["Microsoft.Build"],
 			"groupName": "MSBuild",
-			"allowedVersions": "[17.8,17.9)"
+			"allowedVersions": "<17.9"
 		},
 		{
 			"matchDatasources": ["dotnet-version", "docker"],
