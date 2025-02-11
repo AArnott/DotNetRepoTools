@@ -68,7 +68,7 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 				sourceRefName = $"refs/heads/{this.SourceRefName}",
 				targetRefName = $"refs/heads/{this.TargetRefName}",
 				title = this.Title,
-				description = this.Description ?? ReadFromStandardIn(),
+				description = this.Description ?? this.ReadFromStandardIn("Enter pull request description."),
 				isDraft = this.IsDraft,
 				labels = this.Labels?.Select(name => new { name }) ?? [],
 			}),
@@ -76,7 +76,7 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 
 		HttpResponseMessage? response = await this.SendAsync(requestMessage, canReadContent: false);
 		await this.PrintErrorMessageAsync(response);
-		if (response is { IsSuccessStatusCode: true })
+		if (this.IsSuccessResponse(response))
 		{
 			if (response.Content.Headers.ContentType?.MediaType == "application/json")
 			{

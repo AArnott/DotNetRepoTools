@@ -156,9 +156,18 @@ public abstract class CommandBase : IDisposable
 	/// <summary>
 	/// Reads the standard input stream until it is closed and returns the content as a string.
 	/// </summary>
+	/// <param name="prompt">The prompt to indicate to the user what is expected.</param>
 	/// <returns>The text from STDIN.</returns>
-	protected static string ReadFromStandardIn()
+	protected string ReadFromStandardIn(string prompt)
 	{
+		if (!this.Console.IsInputRedirected)
+		{
+			this.Console.WriteLine(prompt);
+			this.Console.WriteLine("Multiple lines are allowed.");
+			this.Console.WriteLine(OperatingSystem.IsWindows() ? "Press Ctrl+Z and ENTER when done." : "Press Ctrl+D when done.");
+			this.Console.WriteLine(string.Empty);
+		}
+
 		string? line;
 		StringBuilder sb = new();
 		while ((line = System.Console.ReadLine()) is not null)

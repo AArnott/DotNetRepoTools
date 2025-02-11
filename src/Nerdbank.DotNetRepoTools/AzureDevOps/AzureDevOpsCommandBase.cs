@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
@@ -10,7 +11,7 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 {
 	protected static readonly OptionOrEnvVar AccessTokenOption = new("--access-token", "SYSTEM_ACCESSTOKEN", description: "The access token to use to authenticate against the AzDO REST API.");
 
-	protected static readonly OptionOrEnvVar AccountOption = new("--account", "SYSTEM_COLLECTIONID", isRequired: true, "The AzDO account (organization).");
+	protected static readonly OptionOrEnvVar AccountOption = new("--account", "SYSTEM_COLLECTIONURI", isRequired: true, "The AzDO account (organization) or URI (e.g. \"fabrikamfiber\" or \"https://dev.azure.com/fabrikamfiber/\".");
 
 	protected static readonly OptionOrEnvVar ProjectOption = new("--project", "SYSTEM_TEAMPROJECT", isRequired: true, "The AzDO project.");
 
@@ -27,14 +28,33 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		: base(invocationContext)
 	{
 		this.AccessToken = invocationContext.ParseResult.GetValueForOption(AccessTokenOption);
-		this.Account = invocationContext.ParseResult.GetValueForOption(AccountOption)!;
+		string account = invocationContext.ParseResult.GetValueForOption(AccountOption)!;
 		this.Project = invocationContext.ParseResult.GetValueForOption(ProjectOption)!;
 		this.Repo = invocationContext.ParseResult.GetValueForOption(RepoOption)!;
+
+		if (account.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+		{
+			this.CollectionUri = account;
+			if (!this.CollectionUri.EndsWith('/'))
+			{
+				this.CollectionUri += "/";
+			}
+		}
+		else
+		{
+			this.CollectionUri = $"https://dev.azure.com/{account}/";
+		}
 	}
 
 	public string? AccessToken { get; init; }
 
-	public required string Account { get; init; }
+	/// <summary>
+	/// Gets the collection URI (e.g. https://dev.azure.com/fabrikamfiber/).
+	/// </summary>
+	/// <value>
+	/// A URI that is guaranteed to always end with a trailing slash.
+	/// </value>
+	public required string CollectionUri { get; init; }
 
 	public required string Project { get; init; }
 
@@ -74,7 +94,7 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 	{
 		HttpClient result = new()
 		{
-			BaseAddress = new Uri($"https://dev.azure.com/{this.Account}/{this.Project}/_apis/git/repositories/{this.Repo}"),
+			BaseAddress = new Uri($"{this.CollectionUri}{this.Project}/_apis/git/repositories/{this.Repo}"),
 		};
 		if (this.AccessToken is not null)
 		{
@@ -111,7 +131,7 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		}
 
 		HttpResponseMessage response = await this.HttpClient.SendAsync(request);
-		if (response.IsSuccessStatusCode)
+		if (this.IsSuccessResponse(response))
 		{
 			if (this.Verbose && canReadContent)
 			{
@@ -135,7 +155,12 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 
 	protected virtual async Task PrintErrorMessageAsync(HttpResponseMessage? response)
 	{
-		if (response is { IsSuccessStatusCode: false })
+		if (response is null)
+		{
+			return;
+		}
+
+		if (!this.IsSuccessResponse(response))
 		{
 			if (response.Content.Headers.ContentType?.MediaType == "application/json")
 			{
@@ -148,4 +173,6 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 			}
 		}
 	}
+
+	protected virtual bool IsSuccessResponse([NotNullWhen(true)] HttpResponseMessage? response) => response is { IsSuccessStatusCode: true, StatusCode: not HttpStatusCode.NonAuthoritativeInformation };
 }

@@ -85,7 +85,7 @@ internal class PullRequestCommentCommand : PullRequestModifyingCommandBase
 					{
 						parentCommentId = 0,
 						commentType = CamelCase(this.Type.ToString()),
-						content = this.Comment ?? ReadFromStandardIn(),
+						content = this.Comment ?? this.ReadFromStandardIn("Enter comment for pull request."),
 					},
 				},
 				status = (int)this.State,
