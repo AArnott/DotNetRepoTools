@@ -66,7 +66,7 @@ internal class PullRequestPropertyCommand : PullRequestModifyingCommandBase
 						from = (string?)null,
 						op = this.Operation,
 						path = this.Path,
-						value = this.Value ?? (this.Operation == "add" ? ReadFromStandardIn() : null),
+						value = this.Value ?? (this.Operation == "add" ? this.ReadFromStandardIn($"Enter value for pull request property \"{this.Path}\".") : null),
 					},
 				},
 				mediaType: new("application/json-patch+json")),
