@@ -23,6 +23,7 @@ internal abstract class PullRequestCommandBase : AzureDevOpsCommandBase
 			PullRequestCreateCommand.CreateCommand(),
 			PullRequestPropertyCommand.CreateCommand(),
 			PullRequestReviewerCommandBase.CreateCommand(),
+			PullRequestReviewerVoteCommand.CreateCommand(),
 		};
 
 		return command;
