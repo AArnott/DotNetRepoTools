@@ -15,13 +15,14 @@ internal abstract class PullRequestCommandBase : AzureDevOpsCommandBase
 	{
 	}
 
-	internal static Command Create()
+	internal static new Command CreateCommand()
 	{
 		Command command = new("pr", "Pull request commands")
 		{
 			PullRequestCommentCommand.CreateCommand(),
 			PullRequestCreateCommand.CreateCommand(),
 			PullRequestPropertyCommand.CreateCommand(),
+			PullRequestReviewerCommandBase.CreateCommand(),
 		};
 
 		return command;

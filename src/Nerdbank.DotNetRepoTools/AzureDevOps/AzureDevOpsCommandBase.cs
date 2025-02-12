@@ -39,10 +39,14 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 			{
 				this.CollectionUri += "/";
 			}
+
+			Uri collectionUri = new(account);
+			this.Account = collectionUri.PathAndQuery.TrimStart('/').TrimEnd('/');
 		}
 		else
 		{
 			this.CollectionUri = $"https://dev.azure.com/{account}/";
+			this.Account = account;
 		}
 	}
 
@@ -55,6 +59,8 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 	/// A URI that is guaranteed to always end with a trailing slash.
 	/// </value>
 	public required string CollectionUri { get; init; }
+
+	public required string Account { get; init; }
 
 	public required string Project { get; init; }
 
@@ -70,7 +76,7 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 	{
 		Command git = new("azdo", "Azure DevOps operations")
 		{
-			PullRequestCommandBase.Create(),
+			PullRequestCommandBase.CreateCommand(),
 		};
 
 		return git;
@@ -175,4 +181,20 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 	}
 
 	protected virtual bool IsSuccessResponse([NotNullWhen(true)] HttpResponseMessage? response) => response is { IsSuccessStatusCode: true, StatusCode: not HttpStatusCode.NonAuthoritativeInformation };
+
+	protected async Task<string?> LookupIdentityAsync(string name)
+	{
+		HttpRequestMessage request = new(HttpMethod.Get, $"https://vssps.dev.azure.com/{this.Account}/_apis/identities?searchFilter=General&filterValue={Uri.EscapeDataString(name)}&queryMembership=None&api-version=6.0");
+		HttpResponseMessage? response = await this.SendAsync(request, false);
+		if (this.IsSuccessResponse(response))
+		{
+			AzDOArray<Identity>? result = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.AzDOArrayIdentity, this.CancellationToken);
+			if (result is { Value: [Identity only] })
+			{
+				return only.Id;
+			}
+		}
+
+		return null;
+	}
 }
