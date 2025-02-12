@@ -182,6 +182,22 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 
 	protected virtual bool IsSuccessResponse([NotNullWhen(true)] HttpResponseMessage? response) => response is { IsSuccessStatusCode: true, StatusCode: not HttpStatusCode.NonAuthoritativeInformation };
 
+	protected async Task<string?> WhoAmIAsync()
+	{
+		HttpRequestMessage request = new(HttpMethod.Get, "https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1");
+		HttpResponseMessage? response = await this.SendAsync(request, false);
+		if (this.IsSuccessResponse(response))
+		{
+			MeProfile? me = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.MeProfile, this.CancellationToken);
+			if (me is { Id: string id })
+			{
+				return id;
+			}
+		}
+
+		return null;
+	}
+
 	protected async Task<string?> LookupIdentityAsync(string name)
 	{
 		HttpRequestMessage request = new(HttpMethod.Get, $"https://vssps.dev.azure.com/{this.Account}/_apis/identities?searchFilter=General&filterValue={Uri.EscapeDataString(name)}&queryMembership=None&api-version=6.0");
