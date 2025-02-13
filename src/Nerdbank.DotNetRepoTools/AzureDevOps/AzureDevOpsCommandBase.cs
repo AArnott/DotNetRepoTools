@@ -91,10 +91,18 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		command.AddOption(RepoOption);
 	}
 
-	protected static string CamelCase(string value)
+	[return: NotNullIfNotNull(nameof(value))]
+	protected static string? CamelCase(string? value)
 	{
+		if (value is null)
+		{
+			return null;
+		}
+
 		return value.Length == 0 ? string.Empty : (char.ToLower(value[0]) + value[1..]);
 	}
+
+	protected static string PrefixRef(string defaultPrefix, string refName) => refName.StartsWith("refs/") ? refName : defaultPrefix + refName;
 
 	protected virtual HttpClient CreateHttpClient()
 	{
