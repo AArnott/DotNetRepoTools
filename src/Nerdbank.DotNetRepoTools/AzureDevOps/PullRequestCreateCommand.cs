@@ -8,7 +8,7 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 internal class PullRequestCreateCommand : PullRequestCommandBase
 {
 	protected static readonly Option<string> TitleOption = new("--title", "The title of the pull request.") { IsRequired = true };
-	protected static readonly Option<string> DescriptionOption = new("--description", "The description of the pull request. If not specified, input will be taken from STDIN.");
+	protected static readonly Option<string> DescriptionOption = new("--description", "The description of the pull request. If an argument for this option is not specified on the command line, it will be pulled in from STDIN.") { Arity = ArgumentArity.ZeroOrOne };
 	protected static readonly Option<string> SourceRefNameOption = new("--source", "The name of the branch to merge from. This should not include the refs/heads/ prefix.") { IsRequired = true };
 	protected static readonly Option<string> TargetRefNameOption = new("--target", "The name of the branch to merge into. This should not include the refs/heads/ prefix.") { IsRequired = true };
 	protected static readonly Option<bool> IsDraftOption = new("--draft", "Whether the pull request is a draft.");
@@ -28,11 +28,15 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 		this.TargetRefName = invocationContext.ParseResult.GetValueForOption(TargetRefNameOption)!;
 		this.IsDraft = invocationContext.ParseResult.GetValueForOption(IsDraftOption);
 		this.Labels = invocationContext.ParseResult.GetValueForOption(LabelsOption);
+
+		this.GetDescriptionFromStdIn = this.Description is null && invocationContext.ParseResult.Tokens.Any(t => DescriptionOption.HasAlias(t.Value));
 	}
 
 	public required string Title { get; init; }
 
-	public string? Description { get; init; }
+	public string? Description { get; set; }
+
+	public bool GetDescriptionFromStdIn { get; init; }
 
 	public required string SourceRefName { get; init; }
 
@@ -61,6 +65,11 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 
 	protected override async Task ExecuteCoreAsync()
 	{
+		if (this.GetDescriptionFromStdIn)
+		{
+			this.Description = this.ReadFromStandardIn("Enter description for pull request.");
+		}
+
 		HttpRequestMessage requestMessage = new(HttpMethod.Post, "?api-version=6.0")
 		{
 			Content = JsonContent.Create(new
@@ -68,7 +77,7 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 				sourceRefName = $"refs/heads/{this.SourceRefName}",
 				targetRefName = $"refs/heads/{this.TargetRefName}",
 				title = this.Title,
-				description = this.Description ?? this.ReadFromStandardIn("Enter pull request description."),
+				description = this.Description ?? string.Empty,
 				isDraft = this.IsDraft,
 				labels = this.Labels?.Select(name => new { name }) ?? [],
 			}),
