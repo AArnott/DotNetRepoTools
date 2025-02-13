@@ -5,7 +5,7 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal abstract class PullRequestModifyingCommandBase : PullRequestCommandBase
 {
-	protected static readonly Option<string> PullRequestIdOption = new("--pull-request", "The ID of the pull request.") { IsRequired = true };
+	protected static readonly Option<int> PullRequestIdOption = new("--pull-request", "The ID of the pull request.") { IsRequired = true };
 
 	protected PullRequestModifyingCommandBase()
 	{
@@ -18,7 +18,7 @@ internal abstract class PullRequestModifyingCommandBase : PullRequestCommandBase
 		this.PullRequestId = invocationContext.ParseResult.GetValueForOption(PullRequestIdOption)!;
 	}
 
-	public required string PullRequestId { get; init; }
+	public required int PullRequestId { get; init; }
 
 	protected static new void AddCommonOptions(Command command)
 	{
