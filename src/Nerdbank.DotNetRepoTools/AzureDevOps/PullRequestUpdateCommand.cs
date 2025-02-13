@@ -8,8 +8,6 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 {
-	protected static readonly Argument<int> PullRequestIdArgument = new("id", "The ID of the pull request.") { Arity = ArgumentArity.ExactlyOne };
-
 	protected static readonly Option<string> TitleOption = new("--title", "The title of the pull request.");
 
 	protected static readonly Option<string> DescriptionOption = new("--description", "The description of the pull request. If an argument for this option is not specified on the command line, it will be pulled in from STDIN.") { Arity = ArgumentArity.ZeroOrOne };
@@ -26,7 +24,6 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 	{
 		this.Title = invocationContext.ParseResult.GetValueForOption(TitleOption);
 		this.Description = invocationContext.ParseResult.GetValueForOption(DescriptionOption);
-		this.PullRequestId = invocationContext.ParseResult.GetValueForArgument(PullRequestIdArgument);
 		this.TargetBranch = invocationContext.ParseResult.GetValueForOption(TargetBranchOption);
 
 		this.GetDescriptionFromStdIn = this.Description is null && invocationContext.ParseResult.Tokens.Any(t => DescriptionOption.HasAlias(t.Value));
@@ -44,12 +41,11 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 	{
 		Command command = new("update", "Update a pull request.")
 		{
-			PullRequestIdArgument,
 			TitleOption,
 			DescriptionOption,
 			TargetBranchOption,
 		};
-		AzureDevOpsCommandBase.AddCommonOptions(command);
+		AddCommonOptions(command, pullRequestIdAsArgument: true);
 		command.SetHandler(ctxt => new PullRequestUpdateCommand(ctxt).ExecuteAndDisposeAsync());
 		return command;
 	}
