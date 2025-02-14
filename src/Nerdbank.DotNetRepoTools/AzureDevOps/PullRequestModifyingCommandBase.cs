@@ -29,7 +29,7 @@ internal abstract class PullRequestModifyingCommandBase : PullRequestCommandBase
 
 	protected static void AddCommonOptions(Command command, bool pullRequestIdAsArgument)
 	{
-		AzureDevOpsCommandBase.AddCommonOptions(command);
+		PullRequestCommandBase.AddCommonOptions(command);
 		if (pullRequestIdAsArgument)
 		{
 			command.AddArgument(PullRequestIdArgument);

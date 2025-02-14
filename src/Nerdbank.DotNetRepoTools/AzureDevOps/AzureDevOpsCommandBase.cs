@@ -15,8 +15,6 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 
 	protected static readonly OptionOrEnvVar ProjectOption = new("--project", "SYSTEM_TEAMPROJECT", isRequired: true, "The AzDO project.");
 
-	protected static readonly OptionOrEnvVar RepoOption = new("--repo", "BUILD_REPOSITORY_NAME", isRequired: true, "The name of the repo.");
-
 	private HttpClient? httpClient;
 
 	protected AzureDevOpsCommandBase()
@@ -30,7 +28,6 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		this.AccessToken = invocationContext.ParseResult.GetValueForOption(AccessTokenOption);
 		string account = invocationContext.ParseResult.GetValueForOption(AccountOption)!;
 		this.Project = invocationContext.ParseResult.GetValueForOption(ProjectOption)!;
-		this.Repo = invocationContext.ParseResult.GetValueForOption(RepoOption)!;
 
 		if (account.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
 		{
@@ -64,8 +61,6 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 
 	public required string Project { get; init; }
 
-	public required string Repo { get; init; }
-
 	public HttpClient HttpClient => this.httpClient ??= this.CreateHttpClient();
 
 	/// <summary>
@@ -77,6 +72,7 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		Command git = new("azdo", "Azure DevOps operations")
 		{
 			PullRequestCommandBase.CreateCommand(),
+			WorkItemCommandBase.CreateCommand(),
 		};
 
 		return git;
@@ -88,7 +84,6 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		command.AddOption(AccessTokenOption);
 		command.AddOption(AccountOption);
 		command.AddOption(ProjectOption);
-		command.AddOption(RepoOption);
 	}
 
 	[return: NotNullIfNotNull(nameof(value))]
@@ -108,7 +103,7 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 	{
 		HttpClient result = new()
 		{
-			BaseAddress = new Uri($"{this.CollectionUri}{this.Project}/_apis/git/repositories/{this.Repo}"),
+			BaseAddress = new Uri($"{this.CollectionUri}{this.Project}/_apis/"),
 		};
 		if (this.AccessToken is not null)
 		{

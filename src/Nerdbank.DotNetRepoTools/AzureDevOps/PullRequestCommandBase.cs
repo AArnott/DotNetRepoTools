@@ -3,7 +3,7 @@
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
-internal abstract class PullRequestCommandBase : AzureDevOpsCommandBase
+internal abstract class PullRequestCommandBase : RepoCommandBase
 {
 	protected PullRequestCommandBase()
 	{
@@ -24,6 +24,7 @@ internal abstract class PullRequestCommandBase : AzureDevOpsCommandBase
 			PullRequestGetCommand.CreateCommand(),
 			PullRequestSearchCommand.CreateCommand(),
 			PullRequestUpdateCommand.CreateCommand(),
+			PullRequestLinkCommand.CreateCommand(),
 			PullRequestPropertyCommand.CreateCommand(),
 			PullRequestReviewerCommandBase.CreateCommand(),
 			PullRequestReviewerVoteCommand.CreateCommand(),
