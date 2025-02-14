@@ -24,6 +24,7 @@ internal abstract class PullRequestCommandBase : RepoCommandBase
 			PullRequestGetCommand.CreateCommand(),
 			PullRequestSearchCommand.CreateCommand(),
 			PullRequestUpdateCommand.CreateCommand(),
+			PullRequestLinkCommand.CreateCommand(),
 			PullRequestPropertyCommand.CreateCommand(),
 			PullRequestReviewerCommandBase.CreateCommand(),
 			PullRequestReviewerVoteCommand.CreateCommand(),
