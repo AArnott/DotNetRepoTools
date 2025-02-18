@@ -18,6 +18,8 @@ internal class WorkItemCreateCommand : WorkItemCommandBase
 
 	protected static readonly Option<string> IterationPathOption = new("--iteration", "The iteration path for the work item.");
 
+	protected static readonly Option<string> AssignedToOption = new("--assigned-to", "The identity to assign the work item to. This will typically be in the form user@domain.com.");
+
 	public WorkItemCreateCommand()
 	{
 	}
@@ -30,11 +32,14 @@ internal class WorkItemCreateCommand : WorkItemCommandBase
 		this.Title = invocationContext.ParseResult.GetValueForArgument(TitleArgument)!;
 		this.AreaPath = invocationContext.ParseResult.GetValueForOption(AreaPathOption)!;
 		this.IterationPath = invocationContext.ParseResult.GetValueForOption(IterationPathOption);
+		this.AssignedTo = invocationContext.ParseResult.GetValueForOption(AssignedToOption);
 	}
 
 	public required string Type { get; init; }
 
 	public required string Title { get; init; }
+
+	public string? AssignedTo { get; init; }
 
 	public string? AreaPath { get; init; }
 
@@ -48,6 +53,7 @@ internal class WorkItemCreateCommand : WorkItemCommandBase
 			TitleArgument,
 			AreaPathOption,
 			IterationPathOption,
+			AssignedToOption,
 		};
 		AddCommonOptions(command);
 
@@ -69,6 +75,11 @@ internal class WorkItemCreateCommand : WorkItemCommandBase
 		if (this.IterationPath is not null)
 		{
 			patches.Add(new() { Path = "/fields/System.IterationPath", Value = this.IterationPath });
+		}
+
+		if (this.AssignedTo is not null)
+		{
+			patches.Add(new() { Path = "/fields/System.AssignedTo", Value = this.AssignedTo });
 		}
 
 		string workItemJson = this.ReadFromStandardIn("Provide a JSON object with properties that you want to set as fields on your work item.");
