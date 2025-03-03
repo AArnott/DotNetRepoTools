@@ -14,6 +14,12 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 
 	protected static readonly Option<string> TargetBranchOption = new("--target-branch", "The target branch of the pull request. This MAY include the refs/heads/ prefix.");
 
+	protected static readonly Option<bool?> AutoCompleteOption = new("--auto-complete", "Configures the pull request to be automatically completed when all policies are satisfied.");
+
+	protected static readonly Option<GitPullRequestMergeStrategy?> MergeStrategyOption = new("--merge-strategy", "Specifies the merge strategy to use for auto-complete.");
+
+	protected static readonly Option<bool?> DeleteSourceBranchOption = new("--delete-source-branch", "Whether to delete the source branch after the pull request is completed.");
+
 	public PullRequestUpdateCommand()
 	{
 	}
@@ -25,6 +31,9 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 		this.Title = invocationContext.ParseResult.GetValueForOption(TitleOption);
 		this.Description = invocationContext.ParseResult.GetValueForOption(DescriptionOption);
 		this.TargetBranch = invocationContext.ParseResult.GetValueForOption(TargetBranchOption);
+		this.AutoComplete = invocationContext.ParseResult.GetValueForOption(AutoCompleteOption);
+		this.MergeStrategy = invocationContext.ParseResult.GetValueForOption(MergeStrategyOption);
+		this.DeleteSourceBranch = invocationContext.ParseResult.GetValueForOption(DeleteSourceBranchOption);
 
 		this.GetDescriptionFromStdIn = this.Description is null && invocationContext.ParseResult.Tokens.Any(t => DescriptionOption.HasAlias(t.Value));
 	}
@@ -37,6 +46,12 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 
 	public string? TargetBranch { get; init; }
 
+	public bool? AutoComplete { get; init; }
+
+	public GitPullRequestMergeStrategy? MergeStrategy { get; init; } = GitPullRequestMergeStrategy.NoFastForward;
+
+	public bool? DeleteSourceBranch { get; init; }
+
 	internal static new Command CreateCommand()
 	{
 		Command command = new("update", "Update a pull request.")
@@ -44,6 +59,9 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 			TitleOption,
 			DescriptionOption,
 			TargetBranchOption,
+			AutoCompleteOption,
+			MergeStrategyOption,
+			DeleteSourceBranchOption,
 		};
 		AddCommonOptions(command, pullRequestIdAsArgument: true);
 		command.SetHandler(ctxt => new PullRequestUpdateCommand(ctxt).ExecuteAndDisposeAsync());
@@ -72,6 +90,39 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 		if (this.TargetBranch is not null)
 		{
 			body["targetRefName"] = PrefixRef("refs/heads/", this.TargetBranch);
+		}
+
+		string? autoCompletedBy = null;
+		if (this.AutoComplete is bool autoComplete)
+		{
+			autoCompletedBy = autoComplete ? await this.WhoAmIAsync() : "00000000-0000-0000-0000-000000000000";
+			if (autoCompletedBy is null)
+			{
+				this.Console.Error.WriteLine("Unable to determine who you are. Auto-complete cannot be set.");
+			}
+			else
+			{
+				body["autoCompleteSetBy"] = new JsonObject
+				{
+					["id"] = autoCompletedBy,
+				};
+			}
+		}
+
+		if (this.MergeStrategy is not null || this.DeleteSourceBranch is not null)
+		{
+			JsonObject completionOptions = new();
+			if (this.MergeStrategy is GitPullRequestMergeStrategy mergeStrategy)
+			{
+				completionOptions["mergeStrategy"] = CamelCase(mergeStrategy.ToString());
+			}
+
+			if (this.DeleteSourceBranch is bool deleteSourceBranch)
+			{
+				completionOptions["deleteSourceBranch"] = deleteSourceBranch;
+			}
+
+			body["completionOptions"] = completionOptions;
 		}
 
 		if (body.Count == 0)
