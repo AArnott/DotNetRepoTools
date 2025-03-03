@@ -20,6 +20,8 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 
 	protected static readonly Option<bool?> DeleteSourceBranchOption = new("--delete-source-branch", "Whether to delete the source branch after the pull request is completed.");
 
+	protected static readonly Option<PullRequestStatus?> StatusOption = new("--status", "Activates or abandons the pull request.");
+
 	public PullRequestUpdateCommand()
 	{
 	}
@@ -34,6 +36,7 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 		this.AutoComplete = invocationContext.ParseResult.GetValueForOption(AutoCompleteOption);
 		this.MergeStrategy = invocationContext.ParseResult.GetValueForOption(MergeStrategyOption);
 		this.DeleteSourceBranch = invocationContext.ParseResult.GetValueForOption(DeleteSourceBranchOption);
+		this.Status = invocationContext.ParseResult.GetValueForOption(StatusOption);
 
 		this.GetDescriptionFromStdIn = this.Description is null && invocationContext.ParseResult.Tokens.Any(t => DescriptionOption.HasAlias(t.Value));
 	}
@@ -52,6 +55,8 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 
 	public bool? DeleteSourceBranch { get; init; }
 
+	public PullRequestStatus? Status { get; init; }
+
 	internal static new Command CreateCommand()
 	{
 		Command command = new("update", "Update a pull request.")
@@ -62,6 +67,7 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 			AutoCompleteOption,
 			MergeStrategyOption,
 			DeleteSourceBranchOption,
+			StatusOption,
 		};
 		AddCommonOptions(command, pullRequestIdAsArgument: true);
 		command.SetHandler(ctxt => new PullRequestUpdateCommand(ctxt).ExecuteAndDisposeAsync());
@@ -123,6 +129,16 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 			}
 
 			body["completionOptions"] = completionOptions;
+		}
+
+		if (this.Status is { } status)
+		{
+			body["status"] = status switch
+			{
+				PullRequestStatus.Active => "active",
+				PullRequestStatus.Abandoned => "abandoned",
+				_ => throw new NotSupportedException($"Unsupported status: {status}"),
+			};
 		}
 
 		if (body.Count == 0)
