@@ -76,23 +76,6 @@ jobs:
         run-id: ${{ steps.findrunid.outputs.runid }}
         github-token: ${{ github.token }}
 
-    - name: 🔏 Code sign
-      run: >
-        rm global.json # avoid a need to install a particular SDK version
-
-        dotnet tool install --tool-path obj SignClient
-
-        obj/SignClient sign
-        --baseDirectory '${{ runner.temp }}/deployables'
-        --input '**/*'
-        --config '${{ github.workspace }}/.github/SignClient.json'
-        --filelist '${{ github.workspace }}/.github/signfiles.txt'
-        --user '${{ secrets.CODESIGN_USERNAME }}'
-        --secret '${{ secrets.CODESIGN_SECRET }}'
-        --name 'DotNetRepoTools'
-        --descriptionUrl 'https://github.com/AArnott/DotNetRepoTools'
-      shell: pwsh
-
     - name: 💽 Upload artifacts to release
       shell: pwsh
       if: ${{ github.event_name == 'release' && github.event.release.assets_url != '' }}
@@ -105,5 +88,7 @@ jobs:
         }
 
     - name: 🚀 Push NuGet packages
-      run: dotnet nuget push ${{ runner.temp }}/deployables/*.nupkg --source https://api.nuget.org/v3/index.json -k '${{ secrets.NUGET_API_KEY }}'
+      run: |
+        rm global.json # allow whatever SDK is on the agent
+        dotnet nuget push ${{ runner.temp }}/deployables/*.nupkg --source https://api.nuget.org/v3/index.json -k '${{ secrets.NUGET_API_KEY }}'
       if: ${{ env.NUGET_API_KEY_DEFINED == 'true' }}
