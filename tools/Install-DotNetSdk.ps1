@@ -37,10 +37,7 @@ $DotNetInstallScriptRoot = Resolve-Path $DotNetInstallScriptRoot
 
 # Look up actual required .NET SDK version from global.json
 $sdks = @(New-Object PSObject -Property @{ Version = & "$PSScriptRoot/variables/DotNetSdkVersion.ps1" })
-
-# Sometimes a repo requires extra SDKs to be installed (e.g. msbuild.locator scenarios running in tests).
-# In such a circumstance, a precise SDK version or a channel can be added as in the example below:
-# $sdks += New-Object PSObject -Property @{ Channel = '8.0' }
+$sdks += New-Object PSObject -Property @{ Channel = '8.0' }
 
 If ($IncludeX86 -and ($IsMacOS -or $IsLinux)) {
     Write-Verbose "Ignoring -IncludeX86 switch because 32-bit runtimes are only supported on Windows."
