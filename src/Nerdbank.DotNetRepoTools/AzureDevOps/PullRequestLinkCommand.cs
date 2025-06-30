@@ -8,17 +8,17 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal class PullRequestLinkCommand : PullRequestModifyingCommandBase
 {
-	protected static readonly Argument<int> WorkItemIdArgument = new("workitem-id", "The ID of the work item to link to the pull request.") { Arity = ArgumentArity.ExactlyOne };
+	protected static readonly Argument<int> WorkItemIdArgument = new("workitem-id") { Description = "The ID of the work item to link to the pull request.", Arity = ArgumentArity.ExactlyOne };
 
 	public PullRequestLinkCommand()
 	{
 	}
 
 	[SetsRequiredMembers]
-	public PullRequestLinkCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	public PullRequestLinkCommand(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
-		this.WorkItemId = invocationContext.ParseResult.GetValueForArgument(WorkItemIdArgument);
+		this.WorkItemId = parseResult.GetValue(WorkItemIdArgument);
 	}
 
 	public required int WorkItemId { get; init; }
@@ -30,7 +30,7 @@ internal class PullRequestLinkCommand : PullRequestModifyingCommandBase
 			WorkItemIdArgument,
 		};
 		AddCommonOptions(command);
-		command.SetHandler(ctxt => new PullRequestLinkCommand(ctxt).ExecuteAndDisposeAsync());
+		command.SetAction((parseResult, cancellationToken) => new PullRequestLinkCommand(parseResult, cancellationToken).ExecuteAndDisposeAsync());
 		return command;
 	}
 
@@ -59,7 +59,7 @@ internal class PullRequestLinkCommand : PullRequestModifyingCommandBase
 
 		if (repoId is null || projectId is null)
 		{
-			this.Console.Error.WriteLine("Unable to determine the project and repository IDs for this pull request. Work item will not be linked.");
+			this.Error.WriteLine("Unable to determine the project and repository IDs for this pull request. Work item will not be linked.");
 			this.ExitCode = 2;
 			return;
 		}
@@ -89,7 +89,7 @@ internal class PullRequestLinkCommand : PullRequestModifyingCommandBase
 		using HttpResponseMessage? response = await this.SendAsync(request, canReadContent: false);
 		if (this.IsSuccessResponse(response))
 		{
-			this.Console.WriteLine($"Work item #{this.WorkItemId} linked to pull request {this.PullRequestId}.");
+			this.Out.WriteLine($"Work item #{this.WorkItemId} linked to pull request {this.PullRequestId}.");
 		}
 		else
 		{

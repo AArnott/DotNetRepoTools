@@ -10,8 +10,8 @@ internal abstract class PullRequestCommandBase : RepoCommandBase
 	}
 
 	[SetsRequiredMembers]
-	protected PullRequestCommandBase(InvocationContext invocationContext)
-		: base(invocationContext)
+	protected PullRequestCommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
+		: base(parseResult, cancellationToken)
 	{
 	}
 

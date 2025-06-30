@@ -7,20 +7,20 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal class PullRequestReviewerVoteCommand : PullRequestReviewerCommandBase
 {
-	private static readonly Argument<Vote> VoteArgument = new("vote", "The vote to cast on the specified pull request.") { Arity = ArgumentArity.ExactlyOne };
+	private static readonly Argument<Vote> VoteArgument = new("vote") { Description = "The vote to cast on the specified pull request.", Arity = ArgumentArity.ExactlyOne };
 
-	private static readonly Option<string> IdOption = new("--id", "The ID of the account to cast a vote on behalf of. May be the account ID (guid) or user@domain.com.");
+	private static readonly Option<string> IdOption = new("--id") { Description = "The ID of the account to cast a vote on behalf of. May be the account ID (guid) or user@domain.com." };
 
 	public PullRequestReviewerVoteCommand()
 	{
 	}
 
 	[SetsRequiredMembers]
-	public PullRequestReviewerVoteCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	public PullRequestReviewerVoteCommand(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
-		this.VoteToCast = invocationContext.ParseResult.GetValueForArgument(VoteArgument);
-		this.Id = invocationContext.ParseResult.GetValueForOption(IdOption);
+		this.VoteToCast = parseResult.GetValue(VoteArgument);
+		this.Id = parseResult.GetValue(IdOption);
 	}
 
 	public enum Vote
@@ -47,7 +47,7 @@ internal class PullRequestReviewerVoteCommand : PullRequestReviewerCommandBase
 		};
 		AddCommonOptions(command);
 
-		command.SetHandler(ctxt => new PullRequestReviewerVoteCommand(ctxt).ExecuteAndDisposeAsync());
+		command.SetAction((parseResult, cancellationToken) => new PullRequestReviewerVoteCommand(parseResult, cancellationToken).ExecuteAndDisposeAsync());
 		return command;
 	}
 
@@ -59,7 +59,7 @@ internal class PullRequestReviewerVoteCommand : PullRequestReviewerCommandBase
 			id = await this.LookupIdentityAsync(id);
 			if (id is null)
 			{
-				this.Console.Error.WriteLine($"Unable to translate {this.Id} into an identity.");
+				this.Error.WriteLine($"Unable to translate {this.Id} into an identity.");
 				this.ExitCode = 2;
 				return;
 			}
@@ -72,7 +72,7 @@ internal class PullRequestReviewerVoteCommand : PullRequestReviewerCommandBase
 
 		if (id is null)
 		{
-			this.Console.Error.WriteLine("Unable to find your identity to cast a vote.");
+			this.Error.WriteLine("Unable to find your identity to cast a vote.");
 			this.ExitCode = 1;
 			return;
 		}
@@ -90,7 +90,7 @@ internal class PullRequestReviewerVoteCommand : PullRequestReviewerCommandBase
 		HttpResponseMessage? response = await this.SendAsync(request, canReadContent: true);
 		if (this.IsSuccessResponse(response))
 		{
-			this.Console.WriteLine("OK");
+			this.Out.WriteLine("OK");
 		}
 	}
 }

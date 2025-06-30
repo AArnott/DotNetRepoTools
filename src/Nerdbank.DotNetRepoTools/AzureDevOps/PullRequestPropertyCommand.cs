@@ -7,19 +7,19 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal class PullRequestPropertyCommand : PullRequestModifyingCommandBase
 {
-	protected static readonly Argument<string> PathArgument = new("path", "The path to the property to set. This should always start with a '/' character.") { Arity = ArgumentArity.ExactlyOne };
-	protected static readonly Argument<string> ValueArgument = new("value", "The value of the property to set. Should be a JSON token. If not specified, STDIN will be used.") { Arity = ArgumentArity.ZeroOrOne };
+	protected static readonly Argument<string> PathArgument = new("path") { Description = "The path to the property to set. This should always start with a '/' character.", Arity = ArgumentArity.ExactlyOne };
+	protected static readonly Argument<string> ValueArgument = new("value") { Description = "The value of the property to set. Should be a JSON token. If not specified, STDIN will be used.", Arity = ArgumentArity.ZeroOrOne };
 
 	public PullRequestPropertyCommand()
 	{
 	}
 
 	[SetsRequiredMembers]
-	public PullRequestPropertyCommand(InvocationContext invocationContext, string operation)
-		: base(invocationContext)
+	public PullRequestPropertyCommand(ParseResult parseResult, CancellationToken cancellationToken, string operation)
+		: base(parseResult, cancellationToken)
 	{
-		this.Path = invocationContext.ParseResult.GetValueForArgument(PathArgument)!;
-		this.Value = invocationContext.ParseResult.GetValueForArgument(ValueArgument);
+		this.Path = parseResult.GetValue(PathArgument)!;
+		this.Value = parseResult.GetValue(ValueArgument);
 		this.Operation = operation;
 	}
 
@@ -37,14 +37,14 @@ internal class PullRequestPropertyCommand : PullRequestModifyingCommandBase
 			ValueArgument,
 		};
 		AddCommonOptions(addCommand);
-		addCommand.SetHandler(ctxt => new PullRequestPropertyCommand(ctxt, "add").ExecuteAndDisposeAsync());
+		addCommand.SetAction((parseResult, cancellationToken) => new PullRequestPropertyCommand(parseResult, cancellationToken, "add").ExecuteAndDisposeAsync());
 
 		Command removeCommand = new("remove", "Remove a property from a pull request.")
 		{
 			PathArgument,
 		};
 		AddCommonOptions(removeCommand);
-		removeCommand.SetHandler(ctxt => new PullRequestPropertyCommand(ctxt, "remove").ExecuteAndDisposeAsync());
+		removeCommand.SetAction((parseResult, cancellationToken) => new PullRequestPropertyCommand(parseResult, cancellationToken, "remove").ExecuteAndDisposeAsync());
 
 		Command command = new("property", "Operates on pull request properties.")
 		{
@@ -75,7 +75,7 @@ internal class PullRequestPropertyCommand : PullRequestModifyingCommandBase
 		HttpResponseMessage? response = await this.SendAsync(request, canReadContent: true);
 		if (response is { IsSuccessStatusCode: true })
 		{
-			this.Console.WriteLine("OK");
+			this.Out.WriteLine("OK");
 		}
 	}
 }

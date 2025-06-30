@@ -14,12 +14,12 @@ public abstract class CommandBase : IDisposable
 	/// <summary>
 	/// The <c>--what-if</c> option that can be used to preview the effects of a command without actually executing it.
 	/// </summary>
-	protected static readonly Option<bool> WhatIfOption = new("--what-if", "Prints what would be done without actually doing it.");
+	protected static readonly Option<bool> WhatIfOption = new("--what-if") { Description = "Prints what would be done without actually doing it." };
 
 	/// <summary>
 	/// The --verbose option that should activate printing of spawned commands.
 	/// </summary>
-	protected static readonly Option<bool> VerboseOption = new("--verbose", "Prints the command lines of sub-processes spawned by the tool.");
+	protected static readonly Option<bool> VerboseOption = new("--verbose") { Description = "Prints the command lines of sub-processes spawned by the tool." };
 
 	/// <summary>
 	/// Initializes a new instance of the <see cref="CommandBase"/> class
@@ -33,17 +33,17 @@ public abstract class CommandBase : IDisposable
 	/// Initializes a new instance of the <see cref="CommandBase"/> class
 	/// suitable for actually invoking the command.
 	/// </summary>
-	/// <param name="invocationContext">The command line invocation context, from which to parse the arguments and get other interaction objects.</param>
-	protected CommandBase(InvocationContext invocationContext)
+	/// <param name="parseResult">The parse result, from which to parse the arguments and get other interaction objects.</param>
+	/// <param name="cancellationToken">The cancellation token that applies to the command execution.</param>
+	protected CommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
 	{
-		Requires.NotNull(invocationContext);
+		Requires.NotNull(parseResult);
 
-		this.InvocationContext = invocationContext;
-		this.Console = invocationContext.Console;
-		this.CancellationToken = invocationContext.GetCancellationToken();
+		this.ParseResult = parseResult;
+		this.CancellationToken = cancellationToken;
 
-		this.WhatIf = invocationContext.ParseResult.GetValueForOption(WhatIfOption);
-		this.Verbose = invocationContext.ParseResult.GetValueForOption(VerboseOption);
+		this.WhatIf = parseResult.GetValue(WhatIfOption);
+		this.Verbose = parseResult.GetValue(VerboseOption);
 	}
 
 	/// <summary>
@@ -57,9 +57,19 @@ public abstract class CommandBase : IDisposable
 	public CancellationToken CancellationToken { get; init; }
 
 	/// <summary>
-	/// Gets the console to interact with during execution of the command.
+	/// Gets or sets the output writer for the console.
 	/// </summary>
-	public IConsole Console { get; init; } = new TestConsole();
+	public TextWriter Out { get; set; } = Console.Out;
+
+	/// <summary>
+	/// Gets or sets the error writer for the console.
+	/// </summary>
+	public TextWriter Error { get; set; } = Console.Error;
+
+	/// <summary>
+	/// Gets a value indicating whether input is redirected.
+	/// </summary>
+	public bool IsInputRedirected { get; init; } = Console.IsInputRedirected;
 
 	/// <summary>
 	/// Gets a value indicating whether to merely print the likely effects rather than apply them.
@@ -72,9 +82,9 @@ public abstract class CommandBase : IDisposable
 	public bool Verbose { get; init; }
 
 	/// <summary>
-	/// Gets the command line invocation context, when available.
+	/// Gets the parse result, when available.
 	/// </summary>
-	protected InvocationContext? InvocationContext { get; }
+	protected ParseResult? ParseResult { get; }
 
 	/// <summary>
 	/// Executes the command.
@@ -94,13 +104,6 @@ public abstract class CommandBase : IDisposable
 			}
 
 			throw;
-		}
-		finally
-		{
-			if (this.InvocationContext is not null)
-			{
-				this.InvocationContext.ExitCode = this.ExitCode;
-			}
 		}
 	}
 
@@ -149,8 +152,8 @@ public abstract class CommandBase : IDisposable
 	/// <param name="command">The command to add options to.</param>
 	protected static void AddCommonOptions(Command command)
 	{
-		command.AddOption(WhatIfOption);
-		command.AddOption(VerboseOption);
+		command.Options.Add(WhatIfOption);
+		command.Options.Add(VerboseOption);
 	}
 
 	/// <summary>
@@ -160,12 +163,12 @@ public abstract class CommandBase : IDisposable
 	/// <returns>The text from STDIN.</returns>
 	protected string ReadFromStandardIn(string prompt)
 	{
-		if (!this.Console.IsInputRedirected)
+		if (!this.IsInputRedirected)
 		{
-			this.Console.WriteLine(prompt);
-			this.Console.WriteLine("Multiple lines are allowed.");
-			this.Console.WriteLine(OperatingSystem.IsWindows() ? "Press Ctrl+Z and ENTER when done." : "Press Ctrl+D when done.");
-			this.Console.WriteLine(string.Empty);
+			this.Out.WriteLine(prompt);
+			this.Out.WriteLine("Multiple lines are allowed.");
+			this.Out.WriteLine(OperatingSystem.IsWindows() ? "Press Ctrl+Z and ENTER when done." : "Press Ctrl+D when done.");
+			this.Out.WriteLine(string.Empty);
 		}
 
 		string? line;

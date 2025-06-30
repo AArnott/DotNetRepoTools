@@ -1,7 +1,6 @@
 // Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using System.CommandLine.Builder;
 using System.CommandLine.Parsing;
 using Nerdbank.DotNetRepoTools.AzureDevOps;
 using Nerdbank.DotNetRepoTools.Git;
@@ -22,10 +21,8 @@ internal static class Program
 			GitCommand.CreateCommand(),
 			AzureDevOpsCommandBase.CreateCommand(),
 		};
-		root.Name = "repotools";
-		return new CommandLineBuilder(root)
-			.UseDefaults()
-			.Build()
-			.InvokeAsync(args);
+
+		CommandLineConfiguration config = new(root);
+		return config.InvokeAsync(args);
 	}
 }

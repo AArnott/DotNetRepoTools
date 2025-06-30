@@ -11,8 +11,8 @@ internal class TrimCommand : GitCommandBase
 	{
 	}
 
-	public TrimCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	public TrimCommand(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
 	}
 
@@ -28,19 +28,20 @@ internal class TrimCommand : GitCommandBase
 	/// <returns>The command.</returns>
 	internal static Command CreateCommand()
 	{
-		Argument<string> mergedIntoArg = new("mergeTarget", "Branches become trimmable after they have been merged into this ref. Typically origin/main or similar.")
+		Argument<string> mergedIntoArg = new("mergeTarget")
 		{
+			Description = "Branches become trimmable after they have been merged into this ref. Typically origin/main or similar.",
 			HelpName = "mergeTarget",
 		};
-		mergedIntoArg.AddCompletions(GitRefCompletions);
+		mergedIntoArg.CompletionSources.Add(GitRefCompletions);
 		Command command = new("trim", "Removes local branches that have already been merged into some target ref. Squashed branches can sometimes also be detected.")
 		{
 			mergedIntoArg,
 		};
 		AddCommonOptions(command);
-		command.SetHandler(ctxt => new TrimCommand(ctxt)
+		command.SetAction((parseResult, cancellationToken) => new TrimCommand(parseResult, cancellationToken)
 		{
-			MergedInto = ctxt.ParseResult.GetValueForArgument(mergedIntoArg),
+			MergedInto = parseResult.GetValue(mergedIntoArg)!,
 		}.ExecuteAndDisposeAsync());
 
 		return command;
@@ -85,10 +86,10 @@ internal class TrimCommand : GitCommandBase
 		branchesToDelete.Sort(StringComparer.OrdinalIgnoreCase);
 		if (this.WhatIf)
 		{
-			this.Console.WriteLine("The following branches are trimmable:");
+			this.Out.WriteLine("The following branches are trimmable:");
 			foreach (string branch in branchesToDelete)
 			{
-				this.Console.WriteLine($"  {branch}");
+				this.Out.WriteLine($"  {branch}");
 			}
 		}
 		else

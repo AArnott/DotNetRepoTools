@@ -7,20 +7,20 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal class PullRequestReviewerAddCommand : PullRequestReviewerCommandBase
 {
-	protected static readonly Argument<string[]> OptionalReviewersArgument = new("optional-reviewers", "The users to add as reviewers to the pull request. These should take the form of user@domain.com.") { Arity = ArgumentArity.ZeroOrMore };
+	protected static readonly Argument<string[]> OptionalReviewersArgument = new("optional-reviewers") { Description = "The users to add as reviewers to the pull request. These should take the form of user@domain.com.", Arity = ArgumentArity.ZeroOrMore };
 
-	protected static readonly Option<string[]> RequiredReviewersOption = new("--required", "The users to add as required reviewers to the pull request. These should take the form of user@domain.com. All users listed after this switch will be required.") { Arity = ArgumentArity.OneOrMore, AllowMultipleArgumentsPerToken = true };
+	protected static readonly Option<string[]> RequiredReviewersOption = new("--required") { Description = "The users to add as required reviewers to the pull request. These should take the form of user@domain.com. All users listed after this switch will be required.", Arity = ArgumentArity.OneOrMore, AllowMultipleArgumentsPerToken = true };
 
 	public PullRequestReviewerAddCommand()
 	{
 	}
 
 	[SetsRequiredMembers]
-	public PullRequestReviewerAddCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	public PullRequestReviewerAddCommand(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
-		this.OptionalReviewers = invocationContext.ParseResult.GetValueForArgument(OptionalReviewersArgument)!;
-		this.RequiredReviewers = invocationContext.ParseResult.GetValueForOption(RequiredReviewersOption)!;
+		this.OptionalReviewers = parseResult.GetValue(OptionalReviewersArgument)!;
+		this.RequiredReviewers = parseResult.GetValue(RequiredReviewersOption)!;
 	}
 
 	public required string[] OptionalReviewers { get; init; }
@@ -30,11 +30,11 @@ internal class PullRequestReviewerAddCommand : PullRequestReviewerCommandBase
 	internal static new Command CreateCommand()
 	{
 		Command command = new("add", "Adds reviewers to a pull request.");
-		command.AddArgument(OptionalReviewersArgument);
-		command.AddOption(RequiredReviewersOption);
+		command.Arguments.Add(OptionalReviewersArgument);
+		command.Options.Add(RequiredReviewersOption);
 		AddCommonOptions(command);
 
-		command.SetHandler(ctxt => new PullRequestReviewerAddCommand(ctxt).ExecuteAndDisposeAsync());
+		command.SetAction((parseResult, cancellationToken) => new PullRequestReviewerAddCommand(parseResult, cancellationToken).ExecuteAndDisposeAsync());
 		return command;
 	}
 
@@ -42,7 +42,7 @@ internal class PullRequestReviewerAddCommand : PullRequestReviewerCommandBase
 	{
 		if (this.RequiredReviewers.Length == 0 && this.OptionalReviewers.Length == 0)
 		{
-			this.Console.Error.WriteLine("No reviewers to add.");
+			this.Error.WriteLine("No reviewers to add.");
 		}
 
 		foreach (string required in this.RequiredReviewers)
@@ -58,12 +58,12 @@ internal class PullRequestReviewerAddCommand : PullRequestReviewerCommandBase
 		async Task AddReviewerAsync(string reviewer, bool required)
 		{
 			string optReq = required ? " required" : "n optional";
-			this.Console.Write($"Adding {reviewer} as a{optReq} reviewer...");
+			this.Out.Write($"Adding {reviewer} as a{optReq} reviewer...");
 
 			string? id = await this.LookupIdentityAsync(reviewer);
 			if (id is null)
 			{
-				this.Console.WriteLine("NOT FOUND.");
+				this.Out.WriteLine("NOT FOUND.");
 				return;
 			}
 
@@ -80,7 +80,7 @@ internal class PullRequestReviewerAddCommand : PullRequestReviewerCommandBase
 			HttpResponseMessage? response = await this.SendAsync(request, canReadContent: true);
 			if (this.IsSuccessResponse(response))
 			{
-				this.Console.WriteLine("OK");
+				this.Out.WriteLine("OK");
 			}
 		}
 	}

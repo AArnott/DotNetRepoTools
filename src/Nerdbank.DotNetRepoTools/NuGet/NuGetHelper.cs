@@ -27,24 +27,31 @@ internal class NuGetHelper
 	private static readonly Regex VersionPropertyReference = new(@"^\$\(([\w_]+)\)$");
 	private readonly MSBuild msbuild;
 
-	internal NuGetHelper(MSBuild msbuild, IConsole console, string projectPath)
-		: this(msbuild, console, OpenOrCreateSandboxProject(msbuild, projectPath))
+	internal NuGetHelper(MSBuild msbuild, string projectPath)
+		: this(msbuild, OpenOrCreateSandboxProject(msbuild, projectPath))
 	{
 	}
 
-	internal NuGetHelper(MSBuild msbuild, IConsole console, Project project)
+	internal NuGetHelper(MSBuild msbuild, Project project)
 	{
 		this.msbuild = msbuild;
-		this.Console = console;
 		this.Project = project;
 		this.NuGetSettings = Settings.LoadDefaultSettings(project.FullPath);
 	}
 
+	/// <summary>
+	/// Gets the output writer for the console.
+	/// </summary>
+	internal TextWriter Out { get; init; } = Console.Out;
+
+	/// <summary>
+	/// Gets the error writer for the console.
+	/// </summary>
+	internal TextWriter Error { get; init; } = Console.Error;
+
 	internal Project Project { get; }
 
 	internal ISettings NuGetSettings { get; }
-
-	internal IConsole Console { get; }
 
 	internal SourceCacheContext SourceCacheContext { get; set; } = new()
 	{
@@ -57,7 +64,7 @@ internal class NuGetHelper
 	{
 		if (!this.IsCpvmActive)
 		{
-			this.Console.Error.WriteLine("Central package management is not active for this project, but this command requires this.");
+			this.Error.WriteLine("Central package management is not active for this project, but this command requires this.");
 			return false;
 		}
 
@@ -122,12 +129,12 @@ internal class NuGetHelper
 
 		foreach (IAssetsLogMessage message in restoreResultResult.LogMessages)
 		{
-			this.Console.Error.WriteLine($"{message.Message}");
+			this.Error.WriteLine($"{message.Message}");
 		}
 
 		foreach (LibraryRange issue in restoreTargetGraph.Unresolved)
 		{
-			this.Console.Error.WriteLine($"Unresolved package: {issue.Name} {issue.VersionRange}");
+			this.Error.WriteLine($"Unresolved package: {issue.Name} {issue.VersionRange}");
 		}
 
 		return restoreTargetGraph;
@@ -138,7 +145,7 @@ internal class NuGetHelper
 		ProjectRootElement? directoryPackagesPropsXml = this.Project.Imports.FirstOrDefault(i => string.Equals(Path.GetFileName(i.ImportedProject.FullPath), "Directory.Packages.props", StringComparison.OrdinalIgnoreCase)).ImportedProject;
 		if (directoryPackagesPropsXml is null)
 		{
-			this.Console.Error.WriteLine($"Unable to find an imported Directory.Packages.props in your project. Unable to set {id} to {version}.");
+			this.Error.WriteLine($"Unable to find an imported Directory.Packages.props in your project. Unable to set {id} to {version}.");
 			return false;
 		}
 
@@ -200,14 +207,14 @@ internal class NuGetHelper
 
 		if (changed)
 		{
-			this.Console.Write(id);
-			this.Console.Write(oldVersion.Length == 0 ? $" {version}" : $" {oldVersion} -> {version}");
+			this.Out.Write(id);
+			this.Out.Write(oldVersion.Length == 0 ? $" {version}" : $" {oldVersion} -> {version}");
 			if (nameOfChangedProperty is not null)
 			{
-				this.Console.Write($" ({nameOfChangedProperty})");
+				this.Out.Write($" ({nameOfChangedProperty})");
 			}
 
-			this.Console.WriteLine(string.Empty);
+			this.Out.WriteLine(string.Empty);
 		}
 
 		return changed;
@@ -221,7 +228,7 @@ internal class NuGetHelper
 		{
 			cancellationToken.ThrowIfCancellationRequested();
 
-			this.Console.WriteLine("Looking for package downgrade issues...");
+			this.Out.WriteLine("Looking for package downgrade issues...");
 
 			this.Project.ReevaluateIfNecessary();
 			List<PackageReference> packageReferences = this.Project.GetItems(PackageVersionItemType)

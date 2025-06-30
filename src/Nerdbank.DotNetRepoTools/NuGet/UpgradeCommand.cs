@@ -24,9 +24,9 @@ public class UpgradeCommand : MSBuildCommandBase
 	/// <summary>
 	/// Initializes a new instance of the <see cref="UpgradeCommand"/> class.
 	/// </summary>
-	/// <inheritdoc cref="CommandBase(InvocationContext)"/>
-	public UpgradeCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	/// <inheritdoc cref="CommandBase(ParseResult, CancellationToken)"/>
+	public UpgradeCommand(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
 	}
 
@@ -66,12 +66,12 @@ public class UpgradeCommand : MSBuildCommandBase
 	/// <returns>The command.</returns>
 	internal static Command CreateCommand()
 	{
-		Argument<string> packageIdArgument = new Argument<string>("id", "The ID of the root package to be upgraded.");
-		Argument<string> packageVersionArgument = new Argument<string>("version", "The version to upgrade to.");
-		Option<FileSystemInfo> pathOption = new Option<FileSystemInfo>("--path", "The path to the project or repo to upgrade.") { IsRequired = !File.Exists(DirectoryPackagesPropsFileName) }.ExistingOnly();
-		Option<string> frameworkOption = new Option<string>(new[] { "--framework", "-f" }, () => "netstandard2.0", "The target framework used to evaluate package dependencies.");
-		Option<bool> explodeOption = new("--explode", "Add PackageVersion items for every transitive dependency, so that they can be added as direct project dependencies as versions are pre-specified.");
-		Option<string[]> disregardVersionPropertiesOption = new("--disregard-version-properties", "Specifies one or more MSBuild properties that may be used to define a PackageVersion item's Version attribute that should no longer be referenced. This may be useful when properties have been used for multiple packages and their continued use is problematic because the packages now need their own distinct versions.") { AllowMultipleArgumentsPerToken = true };
+		Argument<string> packageIdArgument = new Argument<string>("id") { Description = "The ID of the root package to be upgraded." };
+		Argument<string> packageVersionArgument = new Argument<string>("version") { Description = "The version to upgrade to." };
+		Option<FileSystemInfo> pathOption = new Option<FileSystemInfo>("--path") { Description = "The path to the project or repo to upgrade.", Required = !File.Exists(DirectoryPackagesPropsFileName) }.AcceptExistingOnly();
+		Option<string> frameworkOption = new Option<string>("--framework", "-f") { Description = "The target framework used to evaluate package dependencies.", DefaultValueFactory = _ => "netstandard2.0" };
+		Option<bool> explodeOption = new("--explode") { Description = "Add PackageVersion items for every transitive dependency, so that they can be added as direct project dependencies as versions are pre-specified." };
+		Option<string[]> disregardVersionPropertiesOption = new("--disregard-version-properties") { Description = "Specifies one or more MSBuild properties that may be used to define a PackageVersion item's Version attribute that should no longer be referenced. This may be useful when properties have been used for multiple packages and their continued use is problematic because the packages now need their own distinct versions.", AllowMultipleArgumentsPerToken = true };
 
 		Command command = new("upgrade", "Upgrade a package dependency, and all transitive dependencies such that no package downgrade warnings occur.")
 		{
@@ -82,14 +82,14 @@ public class UpgradeCommand : MSBuildCommandBase
 			explodeOption,
 			disregardVersionPropertiesOption,
 		};
-		command.SetHandler(ctxt => new UpgradeCommand(ctxt)
+		command.SetAction((parseResult, cancellationToken) => new UpgradeCommand(parseResult, cancellationToken)
 		{
-			PackageId = ctxt.ParseResult.GetValueForArgument(packageIdArgument),
-			PackageVersion = ctxt.ParseResult.GetValueForArgument(packageVersionArgument),
-			Path = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Environment.CurrentDirectory,
-			TargetFramework = ctxt.ParseResult.GetValueForOption(frameworkOption)!,
-			Explode = ctxt.ParseResult.GetValueForOption(explodeOption),
-			DisregardVersionProperties = ctxt.ParseResult.GetValueForOption(disregardVersionPropertiesOption)?.ToHashSet(StringComparer.OrdinalIgnoreCase),
+			PackageId = parseResult.GetValue(packageIdArgument)!,
+			PackageVersion = parseResult.GetValue(packageVersionArgument)!,
+			Path = parseResult.GetValue(pathOption)?.FullName ?? Environment.CurrentDirectory,
+			TargetFramework = parseResult.GetValue(frameworkOption)!,
+			Explode = parseResult.GetValue(explodeOption),
+			DisregardVersionProperties = parseResult.GetValue(disregardVersionPropertiesOption)?.ToHashSet(StringComparer.OrdinalIgnoreCase),
 		}.ExecuteAndDisposeAsync());
 
 		return command;
@@ -98,7 +98,7 @@ public class UpgradeCommand : MSBuildCommandBase
 	/// <inheritdoc/>
 	protected override async Task ExecuteCoreAsync()
 	{
-		NuGetHelper nuget = new(this.MSBuild, this.Console, this.Path);
+		NuGetHelper nuget = new(this.MSBuild, this.Path) { Out = this.Out, Error = this.Error };
 		if (!nuget.VerifyCpvmActive())
 		{
 			this.ExitCode = 1;
@@ -110,7 +110,7 @@ public class UpgradeCommand : MSBuildCommandBase
 		if (!topLevelExists)
 		{
 			versionsUpdated--;
-			this.Console.WriteLine($"No version spec for {this.PackageId} was found. It will not be added, but its dependencies that do have versions specified will be updated where necessary to avoid downgrade warnings as if it were present.");
+			this.Out.WriteLine($"No version spec for {this.PackageId} was found. It will not be added, but its dependencies that do have versions specified will be updated where necessary to avoid downgrade warnings as if it were present.");
 		}
 		else
 		{
@@ -124,7 +124,7 @@ public class UpgradeCommand : MSBuildCommandBase
 		// Visit every transitive dependency and explicitly set it.
 		this.CancellationToken.ThrowIfCancellationRequested();
 
-		this.Console.WriteLine("Proactively resolving any introduced package downgrade issues in dependencies.");
+		this.Out.WriteLine("Proactively resolving any introduced package downgrade issues in dependencies.");
 		RestoreTargetGraph restoreGraph = await nuget.GetRestoreTargetGraphAsync(new[] { topLevelReference }, targetFrameworks, this.CancellationToken);
 		foreach (GraphItem<RemoteResolveResult>? item in restoreGraph.Flattened.Where(i => i.Key.Type == LibraryType.Package))
 		{
@@ -134,6 +134,6 @@ public class UpgradeCommand : MSBuildCommandBase
 			}
 		}
 
-		this.Console.WriteLine($"All done. {versionsUpdated} package versions were updated.");
+		this.Out.WriteLine($"All done. {versionsUpdated} package versions were updated.");
 	}
 }

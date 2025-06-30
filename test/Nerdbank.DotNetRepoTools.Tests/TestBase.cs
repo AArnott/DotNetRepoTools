@@ -62,18 +62,18 @@ public abstract class TestBase : IAsyncLifetime
 		}
 	}
 
-	protected void DumpConsole(IConsole console)
+	protected void DumpConsole(StringWriter commandOutput, StringWriter commandError)
 	{
-		if (console.Out.ToString() is { Length: > 0 } stdout)
+		if (commandOutput.ToString() is { Length: > 0 } output)
 		{
 			this.Logger.WriteLine("Command STDOUT:");
-			this.Logger.WriteLine(stdout);
+			this.Logger.WriteLine(output);
 		}
 
-		if (console.Error.ToString() is { Length: > 0 } stderr)
+		if (commandError.ToString() is { Length: > 0 } error)
 		{
 			this.Logger.WriteLine("Command STDERR:");
-			this.Logger.WriteLine(stderr);
+			this.Logger.WriteLine(error);
 		}
 	}
 

@@ -7,19 +7,32 @@ public abstract class CommandTestBase<TCommand> : TestBase
 	where TCommand : CommandBase
 {
 	protected const string DirectoryPackagesPropsFileName = "Directory.Packages.props";
+	private TCommand? command;
 
 	protected CommandTestBase(ITestOutputHelper logger)
 		: base(logger)
 	{
 	}
 
-	protected TCommand? Command { get; set; }
+	protected TCommand? Command
+	{
+		get => this.command;
+		set
+		{
+			this.command = value;
+			if (this.command is not null)
+			{
+				this.command.Out = new StringWriter();
+				this.command.Error = new StringWriter();
+			}
+		}
+	}
 
 	public override ValueTask DisposeAsync()
 	{
 		if (this.Command is not null)
 		{
-			this.DumpConsole(this.Command.Console);
+			this.DumpConsole((StringWriter)this.Command.Out, (StringWriter)this.Command.Error);
 			this.Command.Dispose();
 		}
 

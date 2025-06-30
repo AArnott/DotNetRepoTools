@@ -13,23 +13,23 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 /// </remarks>
 internal class PullRequestCommentCommand : PullRequestModifyingCommandBase
 {
-	protected static readonly Argument<string> CommentArgument = new("comment", "The comment to post. Markdown format. If not specified, STDIN will be used.") { Arity = ArgumentArity.ZeroOrOne };
+	protected static readonly Argument<string> CommentArgument = new("comment") { Description = "The comment to post. Markdown format. If not specified, STDIN will be used.", Arity = ArgumentArity.ZeroOrOne };
 
-	protected static readonly Option<CommentType> TypeOption = new("--type", () => CommentType.Text, "The type of comment to post.");
+	protected static readonly Option<CommentType> TypeOption = new("--type") { Description = "The type of comment to post.", DefaultValueFactory = _ => CommentType.Text };
 
-	protected static readonly Option<PullRequestCommentState> StateOption = new("--state", "The state to set the new comment.");
+	protected static readonly Option<PullRequestCommentState> StateOption = new("--state") { Description = "The state to set the new comment." };
 
 	public PullRequestCommentCommand()
 	{
 	}
 
 	[SetsRequiredMembers]
-	public PullRequestCommentCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	public PullRequestCommentCommand(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
-		this.Comment = invocationContext.ParseResult.GetValueForArgument(CommentArgument);
-		this.State = invocationContext.ParseResult.GetValueForOption(StateOption);
-		this.Type = invocationContext.ParseResult.GetValueForOption(TypeOption);
+		this.Comment = parseResult.GetValue(CommentArgument);
+		this.State = parseResult.GetValue(StateOption);
+		this.Type = parseResult.GetValue(TypeOption);
 	}
 
 	public enum CommentType
@@ -64,12 +64,12 @@ internal class PullRequestCommentCommand : PullRequestModifyingCommandBase
 	internal static new Command CreateCommand()
 	{
 		Command command = new("comment", "Post a comment on a pull request.");
-		command.AddArgument(CommentArgument);
-		command.AddOption(StateOption);
-		command.AddOption(TypeOption);
+		command.Arguments.Add(CommentArgument);
+		command.Options.Add(StateOption);
+		command.Options.Add(TypeOption);
 		AddCommonOptions(command);
 
-		command.SetHandler(ctxt => new PullRequestCommentCommand(ctxt).ExecuteAndDisposeAsync());
+		command.SetAction((parseResult, cancellationToken) => new PullRequestCommentCommand(parseResult, cancellationToken).ExecuteAndDisposeAsync());
 		return command;
 	}
 
@@ -94,7 +94,7 @@ internal class PullRequestCommentCommand : PullRequestModifyingCommandBase
 		HttpResponseMessage? response = await this.SendAsync(requestMessage, canReadContent: true);
 		if (response is { IsSuccessStatusCode: true })
 		{
-			this.Console.WriteLine("OK");
+			this.Out.WriteLine("OK");
 		}
 	}
 }

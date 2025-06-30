@@ -9,29 +9,29 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal class PullRequestSearchCommand : PullRequestCommandBase
 {
-	protected static readonly Option<string> SourceBranchOption = new("--source-branch", "The source branch of the pull request. MAY start with 'refs/heads/'.");
+	protected static readonly Option<string> SourceBranchOption = new("--source-branch") { Description = "The source branch of the pull request. MAY start with 'refs/heads/'." };
 
-	protected static readonly Option<string> TargetBranchOption = new("--target-branch", "The target branch of the pull request. MAY start with 'refs/heads/'.");
+	protected static readonly Option<string> TargetBranchOption = new("--target-branch") { Description = "The target branch of the pull request. MAY start with 'refs/heads/'." };
 
-	protected static readonly Option<PullRequestStatus?> StatusOption = new("--status", "The status of the pull request.");
+	protected static readonly Option<PullRequestStatus?> StatusOption = new("--status") { Description = "The status of the pull request." };
 
-	protected static readonly Option<int?> TopOption = new("--top", "The maximum number of pull requests to return.");
+	protected static readonly Option<int?> TopOption = new("--top") { Description = "The maximum number of pull requests to return." };
 
-	protected static readonly Option<int?> SkipOption = new("--skip", "The number of pull requests to skip.");
+	protected static readonly Option<int?> SkipOption = new("--skip") { Description = "The number of pull requests to skip." };
 
 	public PullRequestSearchCommand()
 	{
 	}
 
 	[SetsRequiredMembers]
-	public PullRequestSearchCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	public PullRequestSearchCommand(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
-		this.SourceBranch = invocationContext.ParseResult.GetValueForOption(SourceBranchOption);
-		this.TargetBranch = invocationContext.ParseResult.GetValueForOption(TargetBranchOption);
-		this.Status = invocationContext.ParseResult.GetValueForOption(StatusOption);
-		this.Top = invocationContext.ParseResult.GetValueForOption(TopOption);
-		this.Skip = invocationContext.ParseResult.GetValueForOption(SkipOption);
+		this.SourceBranch = parseResult.GetValue(SourceBranchOption);
+		this.TargetBranch = parseResult.GetValue(TargetBranchOption);
+		this.Status = parseResult.GetValue(StatusOption);
+		this.Top = parseResult.GetValue(TopOption);
+		this.Skip = parseResult.GetValue(SkipOption);
 	}
 
 	public string? SourceBranch { get; init; }
@@ -56,7 +56,7 @@ internal class PullRequestSearchCommand : PullRequestCommandBase
 		};
 		AddCommonOptions(command);
 
-		command.SetHandler(ctxt => new PullRequestSearchCommand(ctxt).ExecuteAndDisposeAsync());
+		command.SetAction((parseResult, cancellationToken) => new PullRequestSearchCommand(parseResult, cancellationToken).ExecuteAndDisposeAsync());
 		return command;
 	}
 
@@ -98,7 +98,7 @@ internal class PullRequestSearchCommand : PullRequestCommandBase
 			JsonNode? json = await response.Content.ReadFromJsonAsync<JsonNode>(this.CancellationToken);
 			if (json?["value"] is JsonNode value)
 			{
-				this.Console.WriteLine(value.ToString());
+				this.Out.WriteLine(value.ToString());
 			}
 		}
 		else

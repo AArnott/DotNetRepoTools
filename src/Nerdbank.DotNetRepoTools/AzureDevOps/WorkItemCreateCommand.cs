@@ -10,29 +10,29 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal class WorkItemCreateCommand : WorkItemCommandBase
 {
-	protected static readonly Argument<string> TypeArgument = new("type", "The type of work item to create.") { Arity = ArgumentArity.ExactlyOne };
+	protected static readonly Argument<string> TypeArgument = new("type") { Description = "The type of work item to create.", Arity = ArgumentArity.ExactlyOne };
 
-	protected static readonly Argument<string> TitleArgument = new("title", "The title for the work item.") { Arity = ArgumentArity.ExactlyOne };
+	protected static readonly Argument<string> TitleArgument = new("title") { Description = "The title for the work item.", Arity = ArgumentArity.ExactlyOne };
 
-	protected static readonly Option<string> AreaPathOption = new("--area", "The area path for the work item.");
+	protected static readonly Option<string> AreaPathOption = new("--area") { Description = "The area path for the work item." };
 
-	protected static readonly Option<string> IterationPathOption = new("--iteration", "The iteration path for the work item.");
+	protected static readonly Option<string> IterationPathOption = new("--iteration") { Description = "The iteration path for the work item." };
 
-	protected static readonly Option<string> AssignedToOption = new("--assigned-to", "The identity to assign the work item to. This will typically be in the form user@domain.com.");
+	protected static readonly Option<string> AssignedToOption = new("--assigned-to") { Description = "The identity to assign the work item to. This will typically be in the form user@domain.com." };
 
 	public WorkItemCreateCommand()
 	{
 	}
 
 	[SetsRequiredMembers]
-	public WorkItemCreateCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	public WorkItemCreateCommand(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
-		this.Type = invocationContext.ParseResult.GetValueForArgument(TypeArgument)!;
-		this.Title = invocationContext.ParseResult.GetValueForArgument(TitleArgument)!;
-		this.AreaPath = invocationContext.ParseResult.GetValueForOption(AreaPathOption)!;
-		this.IterationPath = invocationContext.ParseResult.GetValueForOption(IterationPathOption);
-		this.AssignedTo = invocationContext.ParseResult.GetValueForOption(AssignedToOption);
+		this.Type = parseResult.GetValue(TypeArgument)!;
+		this.Title = parseResult.GetValue(TitleArgument)!;
+		this.AreaPath = parseResult.GetValue(AreaPathOption)!;
+		this.IterationPath = parseResult.GetValue(IterationPathOption);
+		this.AssignedTo = parseResult.GetValue(AssignedToOption);
 	}
 
 	public required string Type { get; init; }
@@ -57,7 +57,7 @@ internal class WorkItemCreateCommand : WorkItemCommandBase
 		};
 		AddCommonOptions(command);
 
-		command.SetHandler(ctxt => new WorkItemCreateCommand(ctxt).ExecuteAndDisposeAsync());
+		command.SetAction((parseResult, cancellationToken) => new WorkItemCreateCommand(parseResult, cancellationToken).ExecuteAndDisposeAsync());
 		return command;
 	}
 
@@ -86,7 +86,7 @@ internal class WorkItemCreateCommand : WorkItemCommandBase
 		JsonNode? workItem = JsonNode.Parse(workItemJson);
 		if (workItem is null)
 		{
-			this.Console.Error.WriteLine("The JSON you provided is not valid.");
+			this.Error.WriteLine("The JSON you provided is not valid.");
 			this.ExitCode = 1;
 			return;
 		}
@@ -109,16 +109,16 @@ internal class WorkItemCreateCommand : WorkItemCommandBase
 			JsonNode? content = await response.Content.ReadFromJsonAsync<JsonNode>();
 			if (content?["id"] is JsonValue bugId)
 			{
-				this.Console.WriteLine($"Created bug #{bugId.GetValue<int>()}");
+				this.Out.WriteLine($"Created bug #{bugId.GetValue<int>()}");
 
 				if (content?["_links"]?["html"]?["href"] is JsonValue url)
 				{
-					this.Console.WriteLine(url.GetValue<string>());
+					this.Out.WriteLine(url.GetValue<string>());
 				}
 			}
 			else
 			{
-				this.Console.WriteLine(content?.ToString() ?? string.Empty);
+				this.Out.WriteLine(content?.ToString() ?? string.Empty);
 			}
 		}
 		else

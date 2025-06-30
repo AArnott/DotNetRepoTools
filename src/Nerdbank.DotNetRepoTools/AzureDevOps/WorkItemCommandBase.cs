@@ -10,8 +10,8 @@ internal abstract class WorkItemCommandBase : AzureDevOpsCommandBase
 	}
 
 	[SetsRequiredMembers]
-	protected WorkItemCommandBase(InvocationContext invocationContext)
-		: base(invocationContext)
+	protected WorkItemCommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
+		: base(parseResult, cancellationToken)
 	{
 	}
 

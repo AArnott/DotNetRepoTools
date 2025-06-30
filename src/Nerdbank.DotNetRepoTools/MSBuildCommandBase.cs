@@ -28,9 +28,9 @@ public abstract class MSBuildCommandBase : CommandBase
 	/// <summary>
 	/// Initializes a new instance of the <see cref="MSBuildCommandBase"/> class.
 	/// </summary>
-	/// <inheritdoc cref="CommandBase(InvocationContext)"/>
-	protected MSBuildCommandBase(InvocationContext invocationContext)
-		: base(invocationContext)
+	/// <inheritdoc cref="CommandBase(ParseResult, CancellationToken)"/>
+	protected MSBuildCommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
+		: base(parseResult, cancellationToken)
 	{
 	}
 

@@ -22,12 +22,12 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 	}
 
 	[SetsRequiredMembers]
-	protected AzureDevOpsCommandBase(InvocationContext invocationContext)
-		: base(invocationContext)
+	protected AzureDevOpsCommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
+		: base(parseResult, cancellationToken)
 	{
-		this.AccessToken = invocationContext.ParseResult.GetValueForOption(AccessTokenOption);
-		string account = invocationContext.ParseResult.GetValueForOption(AccountOption)!;
-		this.Project = invocationContext.ParseResult.GetValueForOption(ProjectOption)!;
+		this.AccessToken = parseResult.GetValue(AccessTokenOption);
+		string account = parseResult.GetValue(AccountOption)!;
+		this.Project = parseResult.GetValue(ProjectOption)!;
 
 		if (account.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
 		{
@@ -83,9 +83,9 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 	protected static new void AddCommonOptions(Command command)
 	{
 		CommandBase.AddCommonOptions(command);
-		command.AddOption(AccessTokenOption);
-		command.AddOption(AccountOption);
-		command.AddOption(ProjectOption);
+		command.Options.Add(AccessTokenOption);
+		command.Options.Add(AccountOption);
+		command.Options.Add(ProjectOption);
 	}
 
 	[return: NotNullIfNotNull(nameof(value))]
@@ -117,16 +117,16 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 
 	protected async Task WriteWhatIfAsync(HttpRequestMessage request)
 	{
-		this.Console.WriteLine($"{request.Method} {new Uri(this.HttpClient.BaseAddress!, request.RequestUri!).AbsoluteUri}");
+		this.Out.WriteLine($"{request.Method} {new Uri(this.HttpClient.BaseAddress!, request.RequestUri!).AbsoluteUri}");
 		foreach (KeyValuePair<string, IEnumerable<string>> header in this.HttpClient.DefaultRequestHeaders)
 		{
-			this.Console.WriteLine($"{header.Key}: {string.Join(", ", header.Value)}");
+			this.Out.WriteLine($"{header.Key}: {string.Join(", ", header.Value)}");
 		}
 
 		if (request.Content is not null)
 		{
-			this.Console.WriteLine(string.Empty);
-			this.Console.WriteLine(await request.Content.ReadAsStringAsync(this.CancellationToken));
+			this.Out.WriteLine(string.Empty);
+			this.Out.WriteLine(await request.Content.ReadAsStringAsync(this.CancellationToken));
 		}
 	}
 
@@ -146,15 +146,15 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		{
 			if (this.Verbose && canReadContent)
 			{
-				this.Console.WriteLine(string.Empty);
-				this.Console.WriteLine("RESPONSE:");
-				this.Console.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
+				this.Out.WriteLine(string.Empty);
+				this.Out.WriteLine("RESPONSE:");
+				this.Out.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
 			}
 		}
 		else
 		{
 			this.ExitCode = (int)response.StatusCode;
-			this.Console.Error.WriteLine($"{(int)response.StatusCode} {response.StatusCode}");
+			this.Error.WriteLine($"{(int)response.StatusCode} {response.StatusCode}");
 			if (canReadContent)
 			{
 				await this.PrintErrorMessageAsync(response);
@@ -176,11 +176,11 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 			if (response.Content.Headers.ContentType?.MediaType == "application/json")
 			{
 				ErrorResponseWithMessage? errorResponse = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.ErrorResponseWithMessage, this.CancellationToken);
-				this.Console.Error.WriteLine(errorResponse?.Message ?? string.Empty);
+				this.Error.WriteLine(errorResponse?.Message ?? string.Empty);
 			}
 			else
 			{
-				this.Console.Error.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
+				this.Error.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
 			}
 		}
 	}
