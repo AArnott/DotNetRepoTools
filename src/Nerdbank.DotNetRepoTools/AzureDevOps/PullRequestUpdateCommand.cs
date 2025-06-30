@@ -8,37 +8,37 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 {
-	protected static readonly Option<string> TitleOption = new("--title", "The title of the pull request.");
+	protected static readonly Option<string> TitleOption = new("--title") { Description = "The title of the pull request." };
 
-	protected static readonly Option<string> DescriptionOption = new("--description", "The description of the pull request. If an argument for this option is not specified on the command line, it will be pulled in from STDIN.") { Arity = ArgumentArity.ZeroOrOne };
+	protected static readonly Option<string> DescriptionOption = new("--description") { Description = "The description of the pull request. If an argument for this option is not specified on the command line, it will be pulled in from STDIN.", Arity = ArgumentArity.ZeroOrOne };
 
-	protected static readonly Option<string> TargetBranchOption = new("--target-branch", "The target branch of the pull request. This MAY include the refs/heads/ prefix.");
+	protected static readonly Option<string> TargetBranchOption = new("--target-branch") { Description = "The target branch of the pull request. This MAY include the refs/heads/ prefix." };
 
-	protected static readonly Option<bool?> AutoCompleteOption = new("--auto-complete", "Configures the pull request to be automatically completed when all policies are satisfied.");
+	protected static readonly Option<bool?> AutoCompleteOption = new("--auto-complete") { Description = "Configures the pull request to be automatically completed when all policies are satisfied." };
 
-	protected static readonly Option<GitPullRequestMergeStrategy?> MergeStrategyOption = new("--merge-strategy", "Specifies the merge strategy to use for auto-complete.");
+	protected static readonly Option<GitPullRequestMergeStrategy?> MergeStrategyOption = new("--merge-strategy") { Description = "Specifies the merge strategy to use for auto-complete." };
 
-	protected static readonly Option<bool?> DeleteSourceBranchOption = new("--delete-source-branch", "Whether to delete the source branch after the pull request is completed.");
+	protected static readonly Option<bool?> DeleteSourceBranchOption = new("--delete-source-branch") { Description = "Whether to delete the source branch after the pull request is completed." };
 
-	protected static readonly Option<PullRequestStatus?> StatusOption = new("--status", "Activates or abandons the pull request.");
+	protected static readonly Option<PullRequestStatus?> StatusOption = new("--status") { Description = "Activates or abandons the pull request." };
 
 	public PullRequestUpdateCommand()
 	{
 	}
 
 	[SetsRequiredMembers]
-	public PullRequestUpdateCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	public PullRequestUpdateCommand(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
-		this.Title = invocationContext.ParseResult.GetValueForOption(TitleOption);
-		this.Description = invocationContext.ParseResult.GetValueForOption(DescriptionOption);
-		this.TargetBranch = invocationContext.ParseResult.GetValueForOption(TargetBranchOption);
-		this.AutoComplete = invocationContext.ParseResult.GetValueForOption(AutoCompleteOption);
-		this.MergeStrategy = invocationContext.ParseResult.GetValueForOption(MergeStrategyOption);
-		this.DeleteSourceBranch = invocationContext.ParseResult.GetValueForOption(DeleteSourceBranchOption);
-		this.Status = invocationContext.ParseResult.GetValueForOption(StatusOption);
+		this.Title = parseResult.GetValue(TitleOption);
+		this.Description = parseResult.GetValue(DescriptionOption);
+		this.TargetBranch = parseResult.GetValue(TargetBranchOption);
+		this.AutoComplete = parseResult.GetValue(AutoCompleteOption);
+		this.MergeStrategy = parseResult.GetValue(MergeStrategyOption);
+		this.DeleteSourceBranch = parseResult.GetValue(DeleteSourceBranchOption);
+		this.Status = parseResult.GetValue(StatusOption);
 
-		this.GetDescriptionFromStdIn = this.Description is null && invocationContext.ParseResult.Tokens.Any(t => DescriptionOption.HasAlias(t.Value));
+		this.GetDescriptionFromStdIn = this.Description is null && parseResult.Tokens.Any(t => DescriptionOption.HasAlias(t.Value));
 	}
 
 	public string? Title { get; init; }
@@ -70,7 +70,7 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 			StatusOption,
 		};
 		AddCommonOptions(command, pullRequestIdAsArgument: true);
-		command.SetHandler(ctxt => new PullRequestUpdateCommand(ctxt).ExecuteAndDisposeAsync());
+		command.SetAction((parseResult, cancellationToken) => new PullRequestUpdateCommand(parseResult, cancellationToken).ExecuteAndDisposeAsync());
 		return command;
 	}
 
@@ -104,7 +104,7 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 			autoCompletedBy = autoComplete ? await this.WhoAmIAsync() : "00000000-0000-0000-0000-000000000000";
 			if (autoCompletedBy is null)
 			{
-				this.Console.Error.WriteLine("Unable to determine who you are. Auto-complete cannot be set.");
+				this.Error.WriteLine("Unable to determine who you are. Auto-complete cannot be set.");
 			}
 			else
 			{
@@ -143,7 +143,7 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 
 		if (body.Count == 0)
 		{
-			this.Console.WriteLine("SKIPPED. No changes requested. Add options to apply changes.");
+			this.Out.WriteLine("SKIPPED. No changes requested. Add options to apply changes.");
 			return;
 		}
 
@@ -157,7 +157,7 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 		HttpResponseMessage? response = await this.SendAsync(request, canReadContent: true);
 		if (this.IsSuccessResponse(response))
 		{
-			this.Console.WriteLine("OK");
+			this.Out.WriteLine("OK");
 		}
 	}
 }

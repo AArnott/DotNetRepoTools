@@ -5,17 +5,17 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal class PullRequestGetCommand : PullRequestCommandBase
 {
-	protected static readonly Argument<int> PullRequestIdArgument = new("id", "The ID of the pull request.") { Arity = ArgumentArity.ExactlyOne };
+	protected static readonly Argument<int> PullRequestIdArgument = new("id") { Description = "The ID of the pull request." };
 
 	public PullRequestGetCommand()
 	{
 	}
 
 	[SetsRequiredMembers]
-	public PullRequestGetCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	public PullRequestGetCommand(ParseResult parseResult, CancellationToken cancellationToken = default)
+		: base(parseResult, cancellationToken)
 	{
-		this.PullRequestId = invocationContext.ParseResult.GetValueForArgument(PullRequestIdArgument);
+		this.PullRequestId = parseResult.GetValue(PullRequestIdArgument);
 	}
 
 	public int PullRequestId { get; init; }
@@ -28,7 +28,12 @@ internal class PullRequestGetCommand : PullRequestCommandBase
 		};
 		AddCommonOptions(command);
 
-		command.SetHandler(ctxt => new PullRequestGetCommand(ctxt).ExecuteAndDisposeAsync());
+		command.SetAction(async (parseResult, cancellationToken) =>
+		{
+			using var cmd = new PullRequestGetCommand(parseResult, cancellationToken);
+			await cmd.ExecuteAsync();
+			return cmd.ExitCode;
+		});
 		return command;
 	}
 
@@ -46,7 +51,7 @@ internal class PullRequestGetCommand : PullRequestCommandBase
 		if (this.IsSuccessResponse(response))
 		{
 			string json = await response.Content.ReadAsStringAsync(this.CancellationToken);
-			this.Console.WriteLine(json);
+			this.Out.WriteLine(json);
 		}
 		else
 		{

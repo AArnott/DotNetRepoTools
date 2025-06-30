@@ -7,29 +7,29 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal class PullRequestCreateCommand : PullRequestCommandBase
 {
-	protected static readonly Option<string> TitleOption = new("--title", "The title of the pull request.") { IsRequired = true };
-	protected static readonly Option<string> DescriptionOption = new("--description", "The description of the pull request. If an argument for this option is not specified on the command line, it will be pulled in from STDIN.") { Arity = ArgumentArity.ZeroOrOne };
-	protected static readonly Option<string> SourceRefNameOption = new("--source", "The name of the branch to merge from. This should not include the refs/heads/ prefix.") { IsRequired = true };
-	protected static readonly Option<string> TargetRefNameOption = new("--target", "The name of the branch to merge into. This should not include the refs/heads/ prefix.") { IsRequired = true };
-	protected static readonly Option<bool> IsDraftOption = new("--draft", "Whether the pull request is a draft.");
-	protected static readonly Option<string[]> LabelsOption = new("--labels", "Labels to apply to the pull request.") { AllowMultipleArgumentsPerToken = true };
+	protected static readonly Option<string> TitleOption = new("--title") { Description = "The title of the pull request.", Required = true };
+	protected static readonly Option<string> DescriptionOption = new("--description") { Description = "The description of the pull request. If an argument for this option is not specified on the command line, it will be pulled in from STDIN.", Arity = ArgumentArity.ZeroOrOne };
+	protected static readonly Option<string> SourceRefNameOption = new("--source") { Description = "The name of the branch to merge from. This should not include the refs/heads/ prefix.", Required = true };
+	protected static readonly Option<string> TargetRefNameOption = new("--target") { Description = "The name of the branch to merge into. This should not include the refs/heads/ prefix.", Required = true };
+	protected static readonly Option<bool> IsDraftOption = new("--draft") { Description = "Whether the pull request is a draft." };
+	protected static readonly Option<string[]> LabelsOption = new("--labels") { Description = "Labels to apply to the pull request.", AllowMultipleArgumentsPerToken = true };
 
 	public PullRequestCreateCommand()
 	{
 	}
 
 	[SetsRequiredMembers]
-	public PullRequestCreateCommand(InvocationContext invocationContext)
-		: base(invocationContext)
+	public PullRequestCreateCommand(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
-		this.Title = invocationContext.ParseResult.GetValueForOption(TitleOption)!;
-		this.Description = invocationContext.ParseResult.GetValueForOption(DescriptionOption);
-		this.SourceRefName = invocationContext.ParseResult.GetValueForOption(SourceRefNameOption)!;
-		this.TargetRefName = invocationContext.ParseResult.GetValueForOption(TargetRefNameOption)!;
-		this.IsDraft = invocationContext.ParseResult.GetValueForOption(IsDraftOption);
-		this.Labels = invocationContext.ParseResult.GetValueForOption(LabelsOption);
+		this.Title = parseResult.GetValue(TitleOption)!;
+		this.Description = parseResult.GetValue(DescriptionOption);
+		this.SourceRefName = parseResult.GetValue(SourceRefNameOption)!;
+		this.TargetRefName = parseResult.GetValue(TargetRefNameOption)!;
+		this.IsDraft = parseResult.GetValue(IsDraftOption);
+		this.Labels = parseResult.GetValue(LabelsOption);
 
-		this.GetDescriptionFromStdIn = this.Description is null && invocationContext.ParseResult.Tokens.Any(t => DescriptionOption.HasAlias(t.Value));
+		this.GetDescriptionFromStdIn = this.Description is null && parseResult.Tokens.Any(t => DescriptionOption.HasAlias(t.Value));
 	}
 
 	public required string Title { get; init; }
@@ -59,7 +59,7 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 		};
 		AddCommonOptions(command);
 
-		command.SetHandler(ctxt => new PullRequestCreateCommand(ctxt).ExecuteAndDisposeAsync());
+		command.SetAction((parseResult, cancellationToken) => new PullRequestCreateCommand(parseResult, cancellationToken).ExecuteAndDisposeAsync());
 		return command;
 	}
 
@@ -92,9 +92,9 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 				PullRequest? pr = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.PullRequest, this.CancellationToken);
 				if (pr is not null)
 				{
-					this.Console.WriteLine($"Pull request {pr.PullRequestId} created.");
+					this.Out.WriteLine($"Pull request {pr.PullRequestId} created.");
 					string prUrl = $"{pr.Repository.WebUrl}/pullrequest/{pr.PullRequestId}";
-					this.Console.WriteLine(prUrl);
+					this.Out.WriteLine(prUrl);
 				}
 			}
 		}

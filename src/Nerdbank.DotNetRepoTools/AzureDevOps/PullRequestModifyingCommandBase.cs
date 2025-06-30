@@ -5,21 +5,21 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal abstract class PullRequestModifyingCommandBase : PullRequestCommandBase
 {
-	protected internal static readonly Argument<int?> PullRequestIdArgument = new("id", "The ID of the pull request.") { Arity = ArgumentArity.ExactlyOne };
+	protected internal static readonly Argument<int?> PullRequestIdArgument = new("id") { Description = "The ID of the pull request." };
 
-	protected static readonly Option<int?> PullRequestIdOption = new("--pull-request", "The ID of the pull request.") { IsRequired = true };
+	protected static readonly Option<int?> PullRequestIdOption = new("--pull-request") { Description = "The ID of the pull request.", Required = true };
 
 	protected PullRequestModifyingCommandBase()
 	{
 	}
 
 	[SetsRequiredMembers]
-	protected PullRequestModifyingCommandBase(InvocationContext invocationContext)
-		: base(invocationContext)
+	protected PullRequestModifyingCommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
+		: base(parseResult, cancellationToken)
 	{
 		this.PullRequestId =
-			invocationContext.ParseResult.GetValueForOption(PullRequestIdOption) ??
-			invocationContext.ParseResult.GetValueForArgument(PullRequestIdArgument) ??
+			parseResult.GetValue(PullRequestIdOption) ??
+			parseResult.GetValue(PullRequestIdArgument) ??
 			throw new InvalidOperationException("No Pull Request ID specified.");
 	}
 
@@ -32,11 +32,11 @@ internal abstract class PullRequestModifyingCommandBase : PullRequestCommandBase
 		PullRequestCommandBase.AddCommonOptions(command);
 		if (pullRequestIdAsArgument)
 		{
-			command.AddArgument(PullRequestIdArgument);
+			command.Arguments.Add(PullRequestIdArgument);
 		}
 		else
 		{
-			command.AddOption(PullRequestIdOption);
+			command.Options.Add(PullRequestIdOption);
 		}
 	}
 

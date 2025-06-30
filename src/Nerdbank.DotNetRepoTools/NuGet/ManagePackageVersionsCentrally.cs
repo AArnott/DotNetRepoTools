@@ -22,9 +22,9 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 	/// <summary>
 	/// Initializes a new instance of the <see cref="ManagePackageVersionsCentrally"/> class.
 	/// </summary>
-	/// <inheritdoc cref="CommandBase(InvocationContext)"/>
-	public ManagePackageVersionsCentrally(InvocationContext invocationContext)
-		: base(invocationContext)
+	/// <inheritdoc cref="CommandBase(ParseResult, CancellationToken)"/>
+	public ManagePackageVersionsCentrally(ParseResult parseResult, CancellationToken cancellationToken)
+		: base(parseResult, cancellationToken)
 	{
 	}
 
@@ -44,24 +44,24 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 	/// <returns>The command.</returns>
 	internal static Command CreateCommand()
 	{
-		Option<FileSystemInfo> pathOption = new Option<FileSystemInfo>("--path", () => new DirectoryInfo(Environment.CurrentDirectory), "The path to the project or repo to upgrade.").ExistingOnly();
-		Option<FileSystemInfo> repoBaseOption = new Option<FileSystemInfo>("--repo-root", "The path to the directory where the Directory.Packages.props is to be created. Defaults to the git repo root above the location specified by --path.").ExistingOnly();
+		Option<FileSystemInfo> pathOption = new Option<FileSystemInfo>("--path") { DefaultValueFactory = _ => new DirectoryInfo(Environment.CurrentDirectory), Description = "The path to the project or repo to upgrade." }.AcceptExistingOnly();
+		Option<FileSystemInfo> repoBaseOption = new Option<FileSystemInfo>("--repo-root") { Description = "The path to the directory where the Directory.Packages.props is to be created. Defaults to the git repo root above the location specified by --path." }.AcceptExistingOnly();
 
 		Command command = new("ManagePackageVersionsCentrally", "Migrates a repo to use centralized package versions.")
 		{
 			pathOption,
 			repoBaseOption,
 		};
-		command.SetHandler(ctxt =>
+		command.SetAction((parseResult, cancellationToken) =>
 		{
-			string path = ctxt.ParseResult.GetValueForOption(pathOption)?.FullName ?? Environment.CurrentDirectory;
-			string? repoRoot = ctxt.ParseResult.GetValueForOption(repoBaseOption)?.FullName ?? FindGitRepoRoot(path);
+			string path = parseResult.GetValue(pathOption)?.FullName ?? Environment.CurrentDirectory;
+			string? repoRoot = parseResult.GetValue(repoBaseOption)?.FullName ?? FindGitRepoRoot(path);
 			if (repoRoot is null)
 			{
 				throw new Exception("No git repo found and --repo-root was not specified.");
 			}
 
-			return new ManagePackageVersionsCentrally(ctxt)
+			return new ManagePackageVersionsCentrally(parseResult, cancellationToken)
 			{
 				Path = path,
 				DirectoryPackagesPropsPath = System.IO.Path.Combine(repoRoot, DirectoryPackagesPropsFileName),
@@ -93,7 +93,7 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 		}
 		else
 		{
-			this.Console.Error.WriteLine($"The path \"{this.Path}\" does not exist.");
+			this.Error.WriteLine($"The path \"{this.Path}\" does not exist.");
 			this.ExitCode = 1;
 		}
 
@@ -122,14 +122,14 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 		}
 		catch (InvalidProjectFileException ex)
 		{
-			this.Console.Error.WriteLine($"Error on \"{relativeProjectPath}\": {ex.Message}");
+			this.Error.WriteLine($"Error on \"{relativeProjectPath}\": {ex.Message}");
 			this.ExitCode = 2;
 			return;
 		}
 
 		if (project.Imports.Count == 0)
 		{
-			this.Console.Error.WriteLine($"Project \"{relativeProjectPath}\" does not import anything. Did you run restore? That's important to do first.");
+			this.Error.WriteLine($"Project \"{relativeProjectPath}\" does not import anything. Did you run restore? That's important to do first.");
 		}
 
 		directoryPackagesProps.ReevaluateIfNecessary();
@@ -181,13 +181,13 @@ public class ManagePackageVersionsCentrally : MSBuildCommandBase
 		if (project.IsDirty || changedFiles.Count > 0)
 		{
 			string versionOverrideWarning = versionOverrides > 0 ? $" (with {versionOverrides} version overrides)" : string.Empty;
-			this.Console.WriteLine($"Migrated \"{relativeProjectPath}\"{versionOverrideWarning}");
+			this.Out.WriteLine($"Migrated \"{relativeProjectPath}\"{versionOverrideWarning}");
 
 			foreach (ProjectRootElement changedFile in changedFiles)
 			{
 				if (changedFile != project.Xml)
 				{
-					this.Console.WriteLine($"  {System.IO.Path.GetRelativePath(System.IO.Path.GetDirectoryName(this.DirectoryPackagesPropsPath)!, changedFile.FullPath)}");
+					this.Out.WriteLine($"  {System.IO.Path.GetRelativePath(System.IO.Path.GetDirectoryName(this.DirectoryPackagesPropsPath)!, changedFile.FullPath)}");
 					changedFile.Save();
 				}
 			}

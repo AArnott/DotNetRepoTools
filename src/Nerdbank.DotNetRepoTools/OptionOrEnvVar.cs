@@ -9,15 +9,17 @@ namespace Nerdbank.DotNetRepoTools;
 internal class OptionOrEnvVar : Option<string>
 {
 	public OptionOrEnvVar(string name, string envVar, bool isRequired = false, string? description = null)
-		: base(name, description)
+		: base(name)
 	{
 		this.EnvironmentVariableName = envVar;
+		this.Description = description;
 		this.AppendDescription(isRequired);
 	}
 
-	public OptionOrEnvVar(string[] aliases, string envVar, bool isRequired = false, string? description = null)
-		: base(aliases, description)
+	public OptionOrEnvVar(string name, string[] aliases, string envVar, bool isRequired = false, string? description = null)
+		: base(name, aliases)
 	{
+		this.Description = description;
 		this.EnvironmentVariableName = envVar;
 		this.AppendDescription(isRequired);
 	}
@@ -29,11 +31,11 @@ internal class OptionOrEnvVar : Option<string>
 		this.Description += $" If not specified, the value of the {this.EnvironmentVariableName} environment variable will be used if set.";
 		if (Environment.GetEnvironmentVariable(this.EnvironmentVariableName) is { Length: > 0 } envVarValue)
 		{
-			this.SetDefaultValue(envVarValue);
+			this.DefaultValueFactory = argResult => envVarValue;
 		}
 		else
 		{
-			this.IsRequired = isRequired;
+			this.Required = isRequired;
 		}
 	}
 }

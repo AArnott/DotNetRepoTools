@@ -10,8 +10,8 @@ internal abstract class PullRequestReviewerCommandBase : PullRequestModifyingCom
 	}
 
 	[SetsRequiredMembers]
-	protected PullRequestReviewerCommandBase(InvocationContext invocationContext)
-		: base(invocationContext)
+	protected PullRequestReviewerCommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
+		: base(parseResult, cancellationToken)
 	{
 	}
 

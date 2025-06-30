@@ -13,8 +13,8 @@ internal abstract class GitCommandBase : CommandBase
 	{
 	}
 
-	protected GitCommandBase(InvocationContext invocationContext)
-		: base(invocationContext)
+	protected GitCommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
+		: base(parseResult, cancellationToken)
 	{
 	}
 
@@ -48,7 +48,7 @@ internal abstract class GitCommandBase : CommandBase
 	{
 		if (this.Verbose)
 		{
-			this.Console.Error.WriteLine($"git {arguments}");
+			this.Error.WriteLine($"git {arguments}");
 		}
 
 		return QueryGitHelper(arguments, cancellationToken);
@@ -58,7 +58,7 @@ internal abstract class GitCommandBase : CommandBase
 	{
 		if (this.Verbose)
 		{
-			this.Console.Error.WriteLine($"git {arguments}");
+			this.Error.WriteLine($"git {arguments}");
 		}
 
 		ProcessStartInfo psi = new("git", arguments)
@@ -82,7 +82,7 @@ internal abstract class GitCommandBase : CommandBase
 	{
 		if (this.Verbose)
 		{
-			this.Console.Error.WriteLine($"git {arguments}");
+			this.Error.WriteLine($"git {arguments}");
 		}
 
 		ProcessStartInfo psi = new("git", arguments);

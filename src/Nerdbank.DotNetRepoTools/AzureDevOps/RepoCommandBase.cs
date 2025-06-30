@@ -12,10 +12,10 @@ internal abstract class RepoCommandBase : AzureDevOpsCommandBase
 	}
 
 	[SetsRequiredMembers]
-	protected RepoCommandBase(InvocationContext invocationContext)
-		: base(invocationContext)
+	protected RepoCommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
+		: base(parseResult, cancellationToken)
 	{
-		this.Repo = invocationContext.ParseResult.GetValueForOption(RepoOption)!;
+		this.Repo = parseResult.GetValue(RepoOption)!;
 	}
 
 	public required string Repo { get; init; }
@@ -23,7 +23,7 @@ internal abstract class RepoCommandBase : AzureDevOpsCommandBase
 	protected static new void AddCommonOptions(Command command)
 	{
 		AzureDevOpsCommandBase.AddCommonOptions(command);
-		command.AddOption(RepoOption);
+		command.Options.Add(RepoOption);
 	}
 
 	protected override HttpClient CreateHttpClient()
