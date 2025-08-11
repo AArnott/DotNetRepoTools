@@ -32,7 +32,7 @@ jobs:
         - windows-2022
 
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+    - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
       with:
         fetch-depth: 0 # avoid shallow clone so nbgv can do its work.
     - name: ⚙ Install prerequisites
@@ -87,7 +87,7 @@ jobs:
     name: 📃 Docs
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+    - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
     - name: 🔗 Markup Link Checker (mlc)
       uses: becheran/mlc@88c9db09b8dabab813a2edd13f955b36aa73657a # v0.22.0
       with:
