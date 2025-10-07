@@ -135,30 +135,30 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 			// - Azure CLI
 			// - Azure PowerShell
 			// - Interactive browser (if needed)
-			DefaultAzureCredential credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
-			{
-				ExcludeEnvironmentCredential = false,
-				ExcludeManagedIdentityCredential = false,
-				ExcludeSharedTokenCacheCredential = false,
-				ExcludeVisualStudioCredential = false,
-				ExcludeVisualStudioCodeCredential = false,
-				ExcludeAzureCliCredential = false,
-				ExcludeAzurePowerShellCredential = false,
-				ExcludeInteractiveBrowserCredential = false,
-			});
+			DefaultAzureCredential credential = new DefaultAzureCredential();
 
 			// Request an access token for Azure DevOps
-			TokenRequestContext tokenRequestContext = new TokenRequestContext(new[] { "499b84ac-1321-427f-aa17-267ca6975798/.default" });
+			// The scope 499b84ac-1321-427f-aa17-267ca6975798 is the Azure DevOps application ID
+			const string AzureDevOpsScope = "499b84ac-1321-427f-aa17-267ca6975798/.default";
+			TokenRequestContext tokenRequestContext = new TokenRequestContext(new[] { AzureDevOpsScope });
 			AccessToken token = credential.GetToken(tokenRequestContext, this.CancellationToken);
 
 			return token.Token;
 		}
-		catch (Exception ex)
+		catch (Azure.Identity.CredentialUnavailableException ex)
 		{
-			// Log the error if verbose mode is enabled
+			// Log when credentials are unavailable if verbose mode is enabled
 			if (this.Verbose)
 			{
-				this.Error.WriteLine($"Failed to automatically acquire access token: {ex.Message}");
+				this.Error.WriteLine($"No credentials available: {ex.Message}");
+			}
+		}
+		catch (Azure.Identity.AuthenticationFailedException ex)
+		{
+			// Log authentication failures if verbose mode is enabled
+			if (this.Verbose)
+			{
+				this.Error.WriteLine($"Failed to authenticate: {ex.Message}");
 			}
 		}
 
