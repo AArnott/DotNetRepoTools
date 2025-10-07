@@ -8,27 +8,46 @@ namespace Nerdbank.DotNetRepoTools;
 /// </summary>
 internal class OptionOrEnvVar : Option<string>
 {
-	public OptionOrEnvVar(string name, string envVar, bool isRequired = false, string? description = null)
+	public OptionOrEnvVar(string name, string envVar, bool isRequired = false, string? description = null, bool doNotAppendToDescription = false)
 		: base(name)
 	{
 		this.EnvironmentVariableName = envVar;
 		this.Description = description;
-		this.AppendDescription(isRequired);
+		if (!doNotAppendToDescription)
+		{
+			this.AppendDescription();
+		}
+
+		this.SetOtherProperties(isRequired);
 	}
 
-	public OptionOrEnvVar(string name, string[] aliases, string envVar, bool isRequired = false, string? description = null)
+	public OptionOrEnvVar(string name, string[] aliases, string envVar, bool isRequired = false, string? description = null, bool doNotAppendToDescription = false)
 		: base(name, aliases)
 	{
 		this.Description = description;
 		this.EnvironmentVariableName = envVar;
-		this.AppendDescription(isRequired);
+		if (!doNotAppendToDescription)
+		{
+			this.AppendDescription();
+		}
+
+		this.SetOtherProperties(isRequired);
 	}
 
 	public string EnvironmentVariableName { get; private init; }
 
-	private void AppendDescription(bool isRequired)
+	public bool AppendToDescription { get; init; } = true;
+
+	private void AppendDescription()
 	{
-		this.Description += $" If not specified, the value of the {this.EnvironmentVariableName} environment variable will be used if set.";
+		if (this.AppendToDescription)
+		{
+			this.Description += $" If not specified, the value of the {this.EnvironmentVariableName} environment variable will be used if set.";
+		}
+	}
+
+	private void SetOtherProperties(bool isRequired)
+	{
 		if (Environment.GetEnvironmentVariable(this.EnvironmentVariableName) is { Length: > 0 } envVarValue)
 		{
 			this.DefaultValueFactory = argResult => envVarValue;
