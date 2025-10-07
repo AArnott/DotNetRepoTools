@@ -10,6 +10,7 @@
     <Description>A CLI tool with commands to help maintain .NET codebases.</Description>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Azure.Identity" />
     <PackageReference Include="Microsoft.Build" PrivateAssets="compile" ExcludeAssets="runtime" />
     <PackageReference Include="Microsoft.Build.Locator" />
     <PackageReference Include="Microsoft.VisualStudio.Validation" />

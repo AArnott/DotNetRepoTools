@@ -4,12 +4,14 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Azure.Core;
+using Azure.Identity;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal abstract class AzureDevOpsCommandBase : CommandBase
 {
-	protected static readonly OptionOrEnvVar AccessTokenOption = new("--access-token", "SYSTEM_ACCESSTOKEN", isRequired: true, description: "The access token to use to authenticate against the AzDO REST API.");
+	protected static readonly OptionOrEnvVar AccessTokenOption = new("--access-token", "SYSTEM_ACCESSTOKEN", isRequired: false, description: "The access token to use to authenticate against the AzDO REST API. If not specified, the tool will attempt to acquire a token automatically from Visual Studio or Windows credentials.");
 
 	protected static readonly OptionOrEnvVar AccountOption = new("--account", "SYSTEM_COLLECTIONURI", isRequired: true, "The AzDO account (organization) or URI (e.g. \"fabrikamfiber\" or \"https://dev.azure.com/fabrikamfiber/\".");
 
@@ -107,12 +109,60 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		{
 			BaseAddress = new Uri($"{this.CollectionUri}{this.Project}/_apis/"),
 		};
-		if (this.AccessToken is not null)
+
+		string? accessToken = this.AccessToken ?? this.AcquireAccessTokenAutomatically();
+		if (accessToken is not null)
 		{
-			result.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", this.AccessToken);
+			result.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 		}
 
 		return result;
+	}
+
+	/// <summary>
+	/// Attempts to automatically acquire an access token for Azure DevOps.
+	/// </summary>
+	/// <returns>The access token, or null if it could not be acquired.</returns>
+	protected virtual string? AcquireAccessTokenAutomatically()
+	{
+		try
+		{
+			// Use DefaultAzureCredential to automatically acquire credentials
+			// This will try multiple sources including:
+			// - Environment variables
+			// - Managed Identity
+			// - Visual Studio
+			// - Azure CLI
+			// - Azure PowerShell
+			// - Interactive browser (if needed)
+			DefaultAzureCredential credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+			{
+				ExcludeEnvironmentCredential = false,
+				ExcludeManagedIdentityCredential = false,
+				ExcludeSharedTokenCacheCredential = false,
+				ExcludeVisualStudioCredential = false,
+				ExcludeVisualStudioCodeCredential = false,
+				ExcludeAzureCliCredential = false,
+				ExcludeAzurePowerShellCredential = false,
+				ExcludeInteractiveBrowserCredential = false,
+			});
+
+			// Request an access token for Azure DevOps
+			TokenRequestContext tokenRequestContext = new TokenRequestContext(new[] { "499b84ac-1321-427f-aa17-267ca6975798/.default" });
+			AccessToken token = credential.GetToken(tokenRequestContext, this.CancellationToken);
+
+			return token.Token;
+		}
+		catch (Exception ex)
+		{
+			// Log the error if verbose mode is enabled
+			if (this.Verbose)
+			{
+				this.Error.WriteLine($"Failed to automatically acquire access token: {ex.Message}");
+			}
+		}
+
+		return null;
 	}
 
 	protected async Task WriteWhatIfAsync(HttpRequestMessage request)
