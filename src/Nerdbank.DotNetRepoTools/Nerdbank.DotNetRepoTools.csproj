@@ -3,7 +3,7 @@
     <!-- Multi-target so that the tool will run on the latest runtime on the user's machine.
          This is important so that if the user only has an SDK installed that matches the latest runtime version,
          we'll be able to find MSBuild via that SDK.  -->
-    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <OutputType>exe</OutputType>
     <ToolCommandName>repo</ToolCommandName>
     <PackAsTool>True</PackAsTool>
