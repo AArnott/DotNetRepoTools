@@ -194,7 +194,7 @@ if ($InstallLocality -eq 'machine') {
         $restartRequired = $false
         $sdks |% {
             if ($_.Version) { $version = $_.Version } else { $version = $_.Channel }
-            if ($PSCmdlet.ShouldProcess(".NET SDK $_", "Install")) {
+            if ($PSCmdlet.ShouldProcess(".NET SDK $version ($arch)", "Install")) {
                 Install-DotNet -Version $version -Architecture $arch
                 $restartRequired = $restartRequired -or ($LASTEXITCODE -eq 3010)
 
@@ -278,10 +278,10 @@ if ($IncludeX86) {
 }
 
 if ($IsMacOS -or $IsLinux) {
-    $DownloadUri = "https://raw.githubusercontent.com/dotnet/install-scripts/0b09de9bc136cacb5f849a6957ebd4062173c148/src/dotnet-install.sh"
+    $DownloadUri = "https://raw.githubusercontent.com/dotnet/install-scripts/a3fbd0fd625032bac207f1f590e5353fe26faa59/src/dotnet-install.sh"
     $DotNetInstallScriptPath = "$DotNetInstallScriptRoot/dotnet-install.sh"
 } else {
-    $DownloadUri = "https://raw.githubusercontent.com/dotnet/install-scripts/0b09de9bc136cacb5f849a6957ebd4062173c148/src/dotnet-install.ps1"
+    $DownloadUri = "https://raw.githubusercontent.com/dotnet/install-scripts/a3fbd0fd625032bac207f1f590e5353fe26faa59/src/dotnet-install.ps1"
     $DotNetInstallScriptPath = "$DotNetInstallScriptRoot/dotnet-install.ps1"
 }
 
@@ -303,7 +303,7 @@ $global:LASTEXITCODE = 0
 $sdks |% {
     if ($_.Version) { $parameters = '-Version', $_.Version } else { $parameters = '-Channel', $_.Channel }
 
-    if ($PSCmdlet.ShouldProcess(".NET SDK $_", "Install")) {
+    if ($PSCmdlet.ShouldProcess(".NET SDK $_ ($arch)", "Install")) {
         $anythingInstalled = $true
         Invoke-Expression -Command "$DotNetInstallScriptPathExpression $parameters -Architecture $arch -InstallDir $DotNetInstallDir $switches"
 
