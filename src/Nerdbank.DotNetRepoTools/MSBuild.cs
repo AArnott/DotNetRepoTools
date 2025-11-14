@@ -18,11 +18,6 @@ public class MSBuild : IDisposable
 	private readonly Dictionary<string, bool> filesThatMayBeChanged = new(StringComparer.OrdinalIgnoreCase);
 	private string? repoRoot;
 
-	static MSBuild()
-	{
-		MSBuildLocator.EnsureLoaded();
-	}
-
 	/// <summary>
 	/// Gets or sets the path to the repo root directory or otherwise the directory above which no file changes should ever be persisted.
 	/// This will always end with a directory separator character.
@@ -98,6 +93,8 @@ public class MSBuild : IDisposable
 		else
 		{
 			pre.Sdk = "Microsoft.NET.Sdk";
+			pre.AddProperty("TargetFramework", "netstandard2.0");
+			pre.AddProperty("NuGetAudit", "disable");
 		}
 
 		pre.FullPath = projectPath;
