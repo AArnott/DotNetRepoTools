@@ -6,6 +6,7 @@ using Microsoft;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
 using NuGet.Commands;
+using NuGet.Commands.Restore;
 using NuGet.Commands.Restore.Utility;
 using NuGet.Configuration;
 using NuGet.DependencyResolver;
@@ -78,11 +79,13 @@ internal class NuGetHelper
 
 	internal async Task<RestoreTargetGraph> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, List<NuGetFramework> targetFrameworks, CancellationToken cancellationToken)
 	{
-		PackageSpec? packageSpec = PackageSpecFactory.GetPackageSpec(new RestoreProjectAdapter(this.Project), this.NuGetSettings);
-		if (packageSpec is null)
+		IProject project = new RestoreProjectAdapter(packages, targetFrameworks)
 		{
-			throw new InvalidOperationException("Unable to generate a package spec for this project.");
-		}
+			Directory = Path.GetDirectoryName(this.Project.FullPath)!,
+			FullPath = this.Project.FullPath,
+		};
+
+		PackageSpec packageSpec = PackageSpecFactory.GetPackageSpec(project, this.NuGetSettings) ?? throw new InvalidOperationException("Unable to generate a package spec for this project.");
 
 		packageSpec.RestoreMetadata.Sources = [.. SettingsUtility.GetEnabledSources(this.NuGetSettings)];
 		packageSpec.RestoreMetadata.FallbackFolders = [.. SettingsUtility.GetFallbackPackageFolders(this.NuGetSettings)];

@@ -1,46 +1,35 @@
 ﻿// Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using Microsoft.Build.Evaluation;
-using Microsoft.Build.Execution;
 using NuGet.Commands.Restore;
+using NuGet.Frameworks;
+using NuGet.Packaging;
 
 namespace Nerdbank.DotNetRepoTools.NuGet;
 
 internal class RestoreProjectAdapter : IProject
 {
-	private readonly Project project;
+	private readonly Dictionary<string, ITargetFramework> targetFrameworks;
 
-	public RestoreProjectAdapter(Project project)
+	public RestoreProjectAdapter(IReadOnlyCollection<PackageReference> packages, IReadOnlyList<NuGetFramework> targetFrameworks)
 	{
-		this.project = project;
-		this.OuterBuild = new TargetFrameworkAdapter(project.CreateProjectInstance());
+		this.targetFrameworks = new Dictionary<string, ITargetFramework>(targetFrameworks.Count, StringComparer.OrdinalIgnoreCase);
 
-		Dictionary<string, ITargetFramework> frameworks = new(StringComparer.OrdinalIgnoreCase);
-		if (project.GetPropertyValue("TargetFramework") is { Length: > 0 } targetFramework)
+		string targetFrameworksString = targetFrameworks.Count > 1 ? string.Join(";", targetFrameworks.Select(tf => tf.GetShortFolderName())) : string.Empty;
+
+		foreach (NuGetFramework targetFramework in targetFrameworks)
 		{
-			frameworks.Add(targetFramework, this.OuterBuild);
-		}
-		else if (project.GetPropertyValue("TargetFrameworks") is { Length: > 0 } targetFrameworks)
-		{
-			foreach (string tf in targetFrameworks.Split(';'))
-			{
-				string tfTrimmed = tf.Trim();
-				Dictionary<string, string> globalProperties = project.GlobalProperties.ToDictionary();
-				globalProperties["TargetFramework"] = tfTrimmed;
-				ProjectInstance tfInstance = new(project.Xml, globalProperties, null, project.ProjectCollection);
-				frameworks.Add(tfTrimmed, new TargetFrameworkAdapter(tfInstance));
-			}
+			this.targetFrameworks.Add(targetFramework.GetShortFolderName(), new TargetFrameworkAdapter(targetFrameworksString, targetFramework, this, packages));
 		}
 
-		this.TargetFrameworks = frameworks;
+		this.OuterBuild = this.targetFrameworks.Values.First();
 	}
 
-	public string FullPath => this.project.FullPath;
+	public required string FullPath { get; init; }
 
-	public string Directory => this.project.DirectoryPath;
+	public required string Directory { get; init; }
 
 	public ITargetFramework OuterBuild { get; }
 
-	public IReadOnlyDictionary<string, ITargetFramework> TargetFrameworks { get; }
+	public IReadOnlyDictionary<string, ITargetFramework> TargetFrameworks => this.targetFrameworks;
 }
