@@ -37,7 +37,10 @@ $DotNetInstallScriptRoot = Resolve-Path $DotNetInstallScriptRoot
 
 # Look up actual required .NET SDK version from global.json
 $sdks = @(New-Object PSObject -Property @{ Version = & "$PSScriptRoot/variables/DotNetSdkVersion.ps1" })
+
+# Also install older SDKs so we have an msbuild toolset to find during testing.
 $sdks += New-Object PSObject -Property @{ Channel = '8.0' }
+$sdks += New-Object PSObject -Property @{ Channel = '9.0' }
 
 If ($IncludeX86 -and ($IsMacOS -or $IsLinux)) {
     Write-Verbose "Ignoring -IncludeX86 switch because 32-bit runtimes are only supported on Windows."
