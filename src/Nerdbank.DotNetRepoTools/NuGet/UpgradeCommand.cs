@@ -126,9 +126,14 @@ public class UpgradeCommand : MSBuildCommandBase
 
 		this.Out.WriteLine("Proactively resolving any introduced package downgrade issues in dependencies.");
 		RestoreTargetGraph restoreGraph = await nuget.GetRestoreTargetGraphAsync(new[] { topLevelReference }, targetFrameworks, this.CancellationToken);
+		Dictionary<string, DowngradeResult<RemoteResolveResult>> downgrades = restoreGraph.AnalyzeResult.Downgrades.ToDictionary(r => r.DowngradedTo.Key.Name, StringComparer.OrdinalIgnoreCase);
 		foreach (GraphItem<RemoteResolveResult>? item in restoreGraph.Flattened.Where(i => i.Key.Type == LibraryType.Package))
 		{
-			if (nuget.SetPackageVersion(item.Key.Name, item.Key.Version.ToFullString(), addIfMissing: this.Explode, allowDowngrade: false, disregardVersionProperties: this.DisregardVersionProperties))
+			string version = downgrades.TryGetValue(item.Key.Name, out DowngradeResult<RemoteResolveResult>? downgrade)
+				? downgrade.DowngradedFrom.Item.Key.Version.ToFullString()
+				: item.Key.Version.ToFullString();
+
+			if (nuget.SetPackageVersion(item.Key.Name, version, addIfMissing: this.Explode, allowDowngrade: false, disregardVersionProperties: this.DisregardVersionProperties))
 			{
 				versionsUpdated++;
 			}

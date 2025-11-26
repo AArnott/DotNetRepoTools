@@ -6,7 +6,8 @@ using Microsoft;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Evaluation;
 using NuGet.Commands;
-using NuGet.Common;
+using NuGet.Commands.Restore;
+using NuGet.Commands.Restore.Utility;
 using NuGet.Configuration;
 using NuGet.DependencyResolver;
 using NuGet.Frameworks;
@@ -78,27 +79,18 @@ internal class NuGetHelper
 
 	internal async Task<RestoreTargetGraph> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, List<NuGetFramework> targetFrameworks, CancellationToken cancellationToken)
 	{
-		// The package spec details what packages to restore
-		PackageSpec packageSpec = new(targetFrameworks.Select(targetFramework => new TargetFrameworkInformation { FrameworkName = targetFramework }).ToList())
+		IProject project = new RestoreProjectAdapter(packages, targetFrameworks)
 		{
-			Dependencies = packages.Select(i => new LibraryDependency { LibraryRange = new LibraryRange(i.PackageIdentity.Id, i.AllowedVersions, LibraryDependencyTarget.Package) }).ToList(),
-			RestoreMetadata = new ProjectRestoreMetadata
-			{
-				ProjectPath = this.Project.FullPath,
-				ProjectName = Path.GetFileNameWithoutExtension(this.Project.FullPath),
-				ProjectStyle = ProjectStyle.PackageReference,
-				ProjectUniqueName = this.Project.FullPath,
-				OutputPath = Path.GetTempPath(),
-				OriginalTargetFrameworks = targetFrameworks.Select(i => i.ToString()).ToList(),
-				ConfigFilePaths = this.NuGetSettings.GetConfigFilePaths(),
-				PackagesPath = SettingsUtility.GetGlobalPackagesFolder(this.NuGetSettings),
-				Sources = SettingsUtility.GetEnabledSources(this.NuGetSettings).ToList(),
-				FallbackFolders = SettingsUtility.GetFallbackPackageFolders(this.NuGetSettings).ToList(),
-			},
-			FilePath = this.Project.FullPath,
-			Name = Path.GetFileNameWithoutExtension(this.Project.FullPath),
+			Directory = Path.GetDirectoryName(this.Project.FullPath)!,
+			FullPath = this.Project.FullPath,
 		};
 
+		PackageSpec packageSpec = PackageSpecFactory.GetPackageSpec(project, this.NuGetSettings) ?? throw new InvalidOperationException("Unable to generate a package spec for this project.");
+
+		packageSpec.RestoreMetadata.Sources = [.. SettingsUtility.GetEnabledSources(this.NuGetSettings)];
+		packageSpec.RestoreMetadata.FallbackFolders = [.. SettingsUtility.GetFallbackPackageFolders(this.NuGetSettings)];
+
+		packageSpec.RestoreMetadata.RestoreAuditProperties.EnableAudit = bool.FalseString;
 		DependencyGraphSpec dependencyGraphSpec = new DependencyGraphSpec();
 
 		dependencyGraphSpec.AddProject(packageSpec);
@@ -112,7 +104,7 @@ internal class NuGetHelper
 			AllowNoOp = true,
 			CacheContext = this.SourceCacheContext,
 			CachingSourceProvider = new CachingSourceProvider(new PackageSourceProvider(this.NuGetSettings)),
-			Log = NullLogger.Instance,
+			Log = new Logger(),
 		};
 
 		cancellationToken.ThrowIfCancellationRequested();
