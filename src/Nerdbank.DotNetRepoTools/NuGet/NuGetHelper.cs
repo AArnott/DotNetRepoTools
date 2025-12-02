@@ -79,18 +79,18 @@ internal class NuGetHelper
 
 	internal async Task<RestoreTargetGraph> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, List<NuGetFramework> targetFrameworks, CancellationToken cancellationToken)
 	{
-		IProject project = new RestoreProjectAdapter(packages, targetFrameworks)
-		{
-			Directory = Path.GetDirectoryName(this.Project.FullPath)!,
-			FullPath = this.Project.FullPath,
-		};
-
-		PackageSpec packageSpec = PackageSpecFactory.GetPackageSpec(project, this.NuGetSettings) ?? throw new InvalidOperationException("Unable to generate a package spec for this project.");
+		PackageSpec packageSpec = GetPackageSpec(this.Project.FullPath, this.NuGetSettings, packages, targetFrameworks) ?? throw new InvalidOperationException("Unable to generate a package spec for this project.");
 
 		packageSpec.RestoreMetadata.Sources = [.. SettingsUtility.GetEnabledSources(this.NuGetSettings)];
 		packageSpec.RestoreMetadata.FallbackFolders = [.. SettingsUtility.GetFallbackPackageFolders(this.NuGetSettings)];
-
+#if NET10_0_OR_GREATER
 		packageSpec.RestoreMetadata.RestoreAuditProperties.EnableAudit = bool.FalseString;
+#else
+		packageSpec.RestoreMetadata.RestoreAuditProperties = new RestoreAuditProperties
+		{
+			EnableAudit = bool.FalseString,
+		};
+#endif
 		DependencyGraphSpec dependencyGraphSpec = new DependencyGraphSpec();
 
 		dependencyGraphSpec.AddProject(packageSpec);
@@ -262,5 +262,42 @@ internal class NuGetHelper
 		}
 
 		return project;
+	}
+
+	private static PackageSpec? GetPackageSpec(string projectFullPath, ISettings settings, IReadOnlyCollection<PackageReference> packages, List<NuGetFramework> targetFrameworks)
+	{
+#if NET10_0_OR_GREATER
+		IProject project = new RestoreProjectAdapter(packages, targetFrameworks)
+		{
+			Directory = Path.GetDirectoryName(projectFullPath)!,
+			FullPath = projectFullPath,
+		};
+
+		PackageSpec? packageSpec = PackageSpecFactory.GetPackageSpec(project, settings);
+
+		return packageSpec;
+#else
+		PackageSpec packageSpec = new(targetFrameworks.Select(targetFramework => new TargetFrameworkInformation { FrameworkName = targetFramework }).ToList())
+		{
+			Dependencies = packages.Select(i => new LibraryDependency { LibraryRange = new LibraryRange(i.PackageIdentity.Id, i.AllowedVersions, LibraryDependencyTarget.Package) }).ToList(),
+			RestoreMetadata = new ProjectRestoreMetadata
+			{
+				ProjectPath = projectFullPath,
+				ProjectName = Path.GetFileNameWithoutExtension(projectFullPath),
+				ProjectStyle = ProjectStyle.PackageReference,
+				ProjectUniqueName = projectFullPath,
+				OutputPath = Path.GetTempPath(),
+				OriginalTargetFrameworks = targetFrameworks.Select(i => i.ToString()).ToList(),
+				ConfigFilePaths = settings.GetConfigFilePaths(),
+				PackagesPath = SettingsUtility.GetGlobalPackagesFolder(settings),
+				Sources = SettingsUtility.GetEnabledSources(settings).ToList(),
+				FallbackFolders = SettingsUtility.GetFallbackPackageFolders(settings).ToList(),
+			},
+			FilePath = projectFullPath,
+			Name = Path.GetFileNameWithoutExtension(projectFullPath),
+		};
+
+		return packageSpec;
+#endif
 	}
 }
