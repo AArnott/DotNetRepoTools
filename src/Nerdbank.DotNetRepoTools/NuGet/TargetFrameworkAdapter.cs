@@ -1,6 +1,6 @@
 ﻿// Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
-
+#if NET10_0_OR_GREATER
 using NuGet.Commands.Restore;
 using NuGet.Frameworks;
 using NuGet.Packaging;
@@ -42,3 +42,4 @@ internal class TargetFrameworkAdapter(string targetFrameworks, NuGetFramework ta
 		};
 	}
 }
+#endif
