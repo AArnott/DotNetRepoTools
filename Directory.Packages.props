@@ -4,7 +4,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
-    <NuGetVersion>7.0.0</NuGetVersion>
+    <NuGetVersion>7.0.1</NuGetVersion>
     <NuGetVersionForNet8>6.11.1</NuGetVersionForNet8>
     <NuGetVersionForNet9>6.14.0</NuGetVersionForNet9>
   </PropertyGroup>
