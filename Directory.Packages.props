@@ -10,7 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Azure.Identity" Version="1.17.1" />
-    <PackageVersion Include="Microsoft.Build" Version="17.10.46" />
+    <PackageVersion Include="Microsoft.Build" Version="18.0.2" />
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
     <PackageVersion Include="Microsoft.VisualStudio.Validation" Version="17.13.22" />
     <PackageVersion Include="System.Formats.Asn1" Version="10.0.0" />
