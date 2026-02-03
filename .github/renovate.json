@@ -1,6 +1,6 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
-	"extends": ["config:best-practices"],
+	"extends": ["config:best-practices","helpers:pinGitHubActionDigestsToSemver"],
 	"labels": ["dependencies"],
 	"nuget": {
 		"ignorePaths": [
@@ -15,6 +15,10 @@
 		{
 			"matchPackageNames": ["xunit*"],
 			"groupName": "xunit"
+		},
+		{
+			"matchPackageNames": ["Microsoft.Testing.Extensions.*"],
+			"groupName": "Microsoft Testing Platform"
 		},
 		{
 			"matchPackageNames": ["Microsoft.Build"],
