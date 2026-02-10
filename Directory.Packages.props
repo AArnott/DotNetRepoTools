@@ -5,7 +5,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <MicrosoftTestingPlatformVersion>2.1.0</MicrosoftTestingPlatformVersion>
-    <NuGetVersion>7.0.1</NuGetVersion>
+    <NuGetVersion>7.3.0</NuGetVersion>
     <NuGetVersionForNet8>6.11.1</NuGetVersionForNet8>
     <NuGetVersionForNet9>6.14.0</NuGetVersionForNet9>
   </PropertyGroup>
