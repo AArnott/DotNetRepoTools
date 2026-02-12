@@ -77,6 +77,7 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		{
 			PullRequestCommandBase.CreateCommand(),
 			WorkItemCommandBase.CreateCommand(),
+			BranchCommandBase.CreateCommand(),
 		};
 
 		return git;
@@ -170,7 +171,14 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		this.Out.WriteLine($"{request.Method} {new Uri(this.HttpClient.BaseAddress!, request.RequestUri!).AbsoluteUri}");
 		foreach (KeyValuePair<string, IEnumerable<string>> header in this.HttpClient.DefaultRequestHeaders)
 		{
-			this.Out.WriteLine($"{header.Key}: {string.Join(", ", header.Value)}");
+			if (header.Key is "Authorization")
+			{
+				this.Out.WriteLine($"{header.Key}: [redacted]");
+			}
+			else
+			{
+				this.Out.WriteLine($"{header.Key}: {string.Join(", ", header.Value)}");
+			}
 		}
 
 		if (request.Content is not null)
@@ -180,6 +188,18 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		}
 	}
 
+	/// <summary>
+	/// Sends an HTTP request asynchronously and processes the response, optionally displaying verbose output and error
+	/// information.
+	/// </summary>
+	/// <remarks>If the operation is in 'what-if' mode, the request is not sent and the method returns <see
+	/// langword="null"/>. When verbose mode is enabled, the method writes detailed request and response information to the
+	/// output streams. The exit code is set based on the response status if the request fails.</remarks>
+	/// <param name="request">The HTTP request message to send. Cannot be null.</param>
+	/// <param name="canReadContent">A value indicating whether the response content can be read and displayed. If <see langword="true"/>, verbose
+	/// output and error messages may include the response content.</param>
+	/// <returns>A task representing the asynchronous operation. The task result is an <see cref="HttpResponseMessage"/> containing
+	/// the HTTP response, or <see langword="null"/> if the operation is a 'what-if' simulation.</returns>
 	protected virtual async Task<HttpResponseMessage?> SendAsync(HttpRequestMessage request, bool canReadContent)
 	{
 		if (this.WhatIf || this.Verbose)
