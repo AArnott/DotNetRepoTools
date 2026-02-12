@@ -19,7 +19,7 @@ public abstract class CommandBase : IDisposable
 	/// <summary>
 	/// The --verbose option that should activate printing of spawned commands.
 	/// </summary>
-	protected static readonly Option<bool> VerboseOption = new("--verbose") { Description = "Prints the command lines of sub-processes spawned by the tool." };
+	protected static readonly Option<bool> VerboseOption = new("--verbose") { Description = "Prints the command lines of sub-processes spawned by the tool and HTTP requests made." };
 
 	/// <summary>
 	/// Initializes a new instance of the <see cref="CommandBase"/> class
@@ -77,7 +77,7 @@ public abstract class CommandBase : IDisposable
 	public bool WhatIf { get; init; }
 
 	/// <summary>
-	/// Gets a value indicating whether to print the command lines of sub-processes spawned by the tool.
+	/// Gets a value indicating whether to print the command lines of sub-processes spawned by the tool and HTTP requests made.
 	/// </summary>
 	public bool Verbose { get; init; }
 
