@@ -11,8 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Microsoft.Build" ExcludeAssets="runtime" />
+    <PackageReference Include="NuGet.Commands" PrivateAssets="compile" />
+    <PackageReference Include="NuGet.Frameworks" PrivateAssets="compile" ExcludeAssets="runtime" />
+    <PackageReference Include="System.CommandLine" />
     <PackageReference Include="System.Formats.Asn1" />
     <PackageReference Include="Xunit.Combinatorial" />
     <PackageReference Include="xunit.v3.mtp-v2" />
