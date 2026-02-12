@@ -34,9 +34,29 @@ internal class OptionOrEnvVar : Option<string>
 		this.SetOtherProperties(isRequired);
 	}
 
+	/// <summary>
+	/// Gets the name of the environment variable used as a fallback.
+	/// </summary>
 	public string EnvironmentVariableName { get; private init; }
 
+	/// <summary>
+	/// Gets a value indicating whether the description should be appended with information about the environment variable fallback.
+	/// </summary>
 	public bool AppendToDescription { get; init; } = true;
+
+	/// <summary>
+	/// Applies a fallback default value if no value has been provided by the command line or environment variable.
+	/// When a non-empty fallback is provided, the option is no longer required.
+	/// </summary>
+	/// <param name="fallbackValue">The fallback value to use as the default.</param>
+	internal void ApplyFallback(string? fallbackValue)
+	{
+		if (fallbackValue is { Length: > 0 } && this.DefaultValueFactory is null)
+		{
+			this.DefaultValueFactory = _ => fallbackValue;
+			this.Required = false;
+		}
+	}
 
 	private void AppendDescription()
 	{
