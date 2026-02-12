@@ -14,7 +14,7 @@
     <PackageReference Include="Microsoft.Build" PrivateAssets="compile" ExcludeAssets="runtime" />
     <PackageReference Include="Microsoft.Build.Locator" />
     <PackageReference Include="Microsoft.VisualStudio.Validation" />
-    <PackageReference Include="NuGet.Commands" PrivateAssets="compile" ExcludeAssets="runtime" />
+    <PackageReference Include="NuGet.Commands" PrivateAssets="compile" />
     <PackageReference Include="NuGet.Frameworks" PrivateAssets="compile" ExcludeAssets="runtime" />
     <PackageReference Include="System.CommandLine" PrivateAssets="compile" />
   </ItemGroup>
