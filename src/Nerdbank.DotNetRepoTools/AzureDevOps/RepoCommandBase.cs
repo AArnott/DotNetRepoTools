@@ -7,7 +7,7 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal abstract class RepoCommandBase : AzureDevOpsCommandBase
 {
-	protected static readonly OptionOrEnvVar RepoOption = new("--repo", "BUILD_REPOSITORY_NAME", isRequired: true, "The name of the repo.");
+	protected static readonly OptionOrEnvVar RepoOption = new("--repo", "BUILD_REPOSITORY_NAME", isRequired: InferredRemoteInfo is null, "The name of the repo. Can also be inferred from the git origin remote URL.");
 
 	protected RepoCommandBase()
 	{
@@ -25,6 +25,8 @@ internal abstract class RepoCommandBase : AzureDevOpsCommandBase
 	protected static new void AddCommonOptions(Command command)
 	{
 		AzureDevOpsCommandBase.AddCommonOptions(command);
+
+		RepoOption.ApplyFallback(InferredRemoteInfo?.Repo);
 		command.Options.Add(RepoOption);
 	}
 

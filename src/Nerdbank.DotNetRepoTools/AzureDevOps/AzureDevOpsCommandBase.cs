@@ -11,11 +11,17 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 internal abstract class AzureDevOpsCommandBase : CommandBase
 {
+	/// <summary>
+	/// Inferred Azure DevOps remote information from the local git repository's <c>origin</c> remote URL.
+	/// Evaluated before option fields so we can determine whether options are required.
+	/// </summary>
+	protected static readonly AzDoRemoteInfo? InferredRemoteInfo = AzDoRemoteInfo.TryInferFromGitRemote();
+
 	protected static readonly OptionOrEnvVar AccessTokenOption = new("--access-token", "SYSTEM_ACCESSTOKEN", isRequired: false, description: "The access token to use to authenticate against the AzDO REST API. If not specified but the SYSTEM_ACCESSTOKEN environment variable is set, that value will be used. Otherwise the tool will attempt to acquire a token automatically from Visual Studio or Windows credentials.", doNotAppendToDescription: true);
 
-	protected static readonly OptionOrEnvVar AccountOption = new("--account", "SYSTEM_COLLECTIONURI", isRequired: true, "The AzDO account (organization) or URI (e.g. \"fabrikamfiber\" or \"https://dev.azure.com/fabrikamfiber/\".");
+	protected static readonly OptionOrEnvVar AccountOption = new("--account", "SYSTEM_COLLECTIONURI", isRequired: InferredRemoteInfo is null, "The AzDO account (organization) or URI (e.g. \"fabrikamfiber\" or \"https://dev.azure.com/fabrikamfiber/\". Can also be inferred from the git origin remote URL.");
 
-	protected static readonly OptionOrEnvVar ProjectOption = new("--project", "SYSTEM_TEAMPROJECT", isRequired: true, "The AzDO project.");
+	protected static readonly OptionOrEnvVar ProjectOption = new("--project", "SYSTEM_TEAMPROJECT", isRequired: InferredRemoteInfo is null, "The AzDO project. Can also be inferred from the git origin remote URL.");
 
 	private HttpClient? httpClient;
 
@@ -87,7 +93,11 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 	{
 		CommandBase.AddCommonOptions(command);
 		command.Options.Add(AccessTokenOption);
+
+		AccountOption.ApplyFallback(InferredRemoteInfo?.CollectionUri);
 		command.Options.Add(AccountOption);
+
+		ProjectOption.ApplyFallback(InferredRemoteInfo?.Project);
 		command.Options.Add(ProjectOption);
 	}
 
