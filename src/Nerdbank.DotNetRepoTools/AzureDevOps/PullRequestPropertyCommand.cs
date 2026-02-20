@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
@@ -59,16 +60,15 @@ internal class PullRequestPropertyCommand : PullRequestModifyingCommandBase
 		HttpRequestMessage request = new(HttpMethod.Patch, "properties?api-version=7.1")
 		{
 			Content = JsonContent.Create(
-				new[]
-				{
-					new
+				new JsonArray(
+					new JsonObject
 					{
-						from = (string?)null,
-						op = this.Operation,
-						path = this.Path,
-						value = this.Value ?? (this.Operation == "add" ? this.ReadFromStandardIn($"Enter value for pull request property \"{this.Path}\".") : null),
-					},
-				},
+						["from"] = (string?)null,
+						["op"] = this.Operation,
+						["path"] = this.Path,
+						["value"] = this.Value ?? (this.Operation == "add" ? this.ReadFromStandardIn($"Enter value for pull request property \"{this.Path}\".") : null),
+					}),
+				SourceGenerationContext.Default.JsonNode,
 				mediaType: new("application/json-patch+json")),
 		};
 

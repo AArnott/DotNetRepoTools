@@ -46,7 +46,7 @@ internal class PullRequestLinkCommand : PullRequestModifyingCommandBase
 		}
 
 		string? projectId = null, repoId = null;
-		JsonNode? detailsJson = await detailsResponse.Content.ReadFromJsonAsync<JsonNode>(this.CancellationToken);
+		JsonNode? detailsJson = await detailsResponse.Content.ReadFromJsonAsync(SourceGenerationContext.Default.JsonNode, this.CancellationToken);
 		if (detailsJson?["repository"]?["id"] is JsonValue repoIdValue)
 		{
 			repoId = repoIdValue.GetValue<string>();
@@ -84,6 +84,7 @@ internal class PullRequestLinkCommand : PullRequestModifyingCommandBase
 		{
 			Content = JsonContent.Create(
 			patches,
+			SourceGenerationContext.Default.ListJsonPatch,
 			mediaType: new("application/json-patch+json")),
 		};
 		using HttpResponseMessage? response = await this.SendAsync(request, canReadContent: false);

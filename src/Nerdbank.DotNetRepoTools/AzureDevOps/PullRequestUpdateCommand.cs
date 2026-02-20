@@ -151,6 +151,7 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 		{
 			Content = JsonContent.Create(
 				body,
+				SourceGenerationContext.Default.JsonNode,
 				mediaType: new("application/json")),
 		};
 

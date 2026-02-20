@@ -13,5 +13,5 @@ internal class JsonPatch
 
 	public string? From { get; set; }
 
-	public JsonNode Value { get; set; } = JsonValue.Create((object?)null)!;
+	public JsonNode? Value { get; set; }
 }

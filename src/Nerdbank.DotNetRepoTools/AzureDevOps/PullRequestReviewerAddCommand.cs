@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
@@ -70,10 +71,8 @@ internal class PullRequestReviewerAddCommand : PullRequestReviewerCommandBase
 			HttpRequestMessage request = new(HttpMethod.Put, $"{id}?api-version=7.1")
 			{
 				Content = JsonContent.Create(
-					new
-					{
-						isRequired = required,
-					},
+					new JsonObject { ["isRequired"] = required },
+					SourceGenerationContext.Default.JsonNode,
 					mediaType: new("application/json")),
 			};
 

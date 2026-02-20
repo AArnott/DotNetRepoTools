@@ -95,7 +95,7 @@ internal class PullRequestSearchCommand : PullRequestCommandBase
 		{
 			// The result is an object with a "count" property and a "value" property.
 			// The "value" property is a JSON array, and implicitly has a length, so just return the array.
-			JsonNode? json = await response.Content.ReadFromJsonAsync<JsonNode>(this.CancellationToken);
+			JsonNode? json = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.JsonNode, this.CancellationToken);
 			if (json?["value"] is JsonNode value)
 			{
 				this.Out.WriteLine(value.ToString());
