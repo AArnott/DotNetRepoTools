@@ -58,7 +58,7 @@ internal class BranchFavoriteCommand : BranchCommandBase
 		// Use project-level client for favorites API
 		HttpRequestMessage requestMessage = new(HttpMethod.Post, $"git/favorites/refs?api-version=7.1-preview.1")
 		{
-			Content = JsonContent.Create(favorite, options: new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }),
+			Content = JsonContent.Create(favorite, SourceGenerationContext.Default.GitRefFavorite),
 		};
 
 		HttpResponseMessage? response = await this.SendAsync(requestMessage, canReadContent: false);

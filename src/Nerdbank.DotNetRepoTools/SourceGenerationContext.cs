@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Nerdbank.DotNetRepoTools.AzureDevOps;
 
@@ -18,6 +19,8 @@ namespace Nerdbank.DotNetRepoTools;
 [JsonSerializable(typeof(GitRefFavorite))]
 [JsonSerializable(typeof(AzDOArray<GitRefFavorite>))]
 [JsonSerializable(typeof(GitRepository))]
+[JsonSerializable(typeof(JsonNode))]
+[JsonSerializable(typeof(List<JsonPatch>))]
 internal partial class SourceGenerationContext : JsonSerializerContext
 {
 }

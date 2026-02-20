@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
@@ -70,17 +71,28 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 			this.Description = this.ReadFromStandardIn("Enter description for pull request.");
 		}
 
+		JsonArray labelsArray = new();
+		if (this.Labels is not null)
+		{
+			foreach (string name in this.Labels)
+			{
+				labelsArray.Add((JsonNode)new JsonObject { ["name"] = name });
+			}
+		}
+
 		HttpRequestMessage requestMessage = new(HttpMethod.Post, "?api-version=6.0")
 		{
-			Content = JsonContent.Create(new
-			{
-				sourceRefName = $"refs/heads/{this.SourceRefName}",
-				targetRefName = $"refs/heads/{this.TargetRefName}",
-				title = this.Title,
-				description = this.Description ?? string.Empty,
-				isDraft = this.IsDraft,
-				labels = this.Labels?.Select(name => new { name }) ?? [],
-			}),
+			Content = JsonContent.Create(
+				new JsonObject
+				{
+					["sourceRefName"] = $"refs/heads/{this.SourceRefName}",
+					["targetRefName"] = $"refs/heads/{this.TargetRefName}",
+					["title"] = this.Title,
+					["description"] = this.Description ?? string.Empty,
+					["isDraft"] = this.IsDraft,
+					["labels"] = labelsArray,
+				},
+				SourceGenerationContext.Default.JsonNode),
 		};
 
 		HttpResponseMessage? response = await this.SendAsync(requestMessage, canReadContent: false);

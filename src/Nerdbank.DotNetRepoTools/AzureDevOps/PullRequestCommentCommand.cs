@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
@@ -77,19 +78,19 @@ internal class PullRequestCommentCommand : PullRequestModifyingCommandBase
 	{
 		HttpRequestMessage requestMessage = new(HttpMethod.Post, "threads?api-version=7.1")
 		{
-			Content = JsonContent.Create(new
-			{
-				comments = new[]
+			Content = JsonContent.Create(
+				new JsonObject
 				{
-					new
-					{
-						parentCommentId = 0,
-						commentType = CamelCase(this.Type.ToString()),
-						content = this.Comment ?? this.ReadFromStandardIn("Enter comment for pull request."),
-					},
+					["comments"] = new JsonArray(
+						new JsonObject
+						{
+							["parentCommentId"] = 0,
+							["commentType"] = CamelCase(this.Type.ToString()),
+							["content"] = this.Comment ?? this.ReadFromStandardIn("Enter comment for pull request."),
+						}),
+					["status"] = (int)this.State,
 				},
-				status = (int)this.State,
-			}),
+				SourceGenerationContext.Default.JsonNode),
 		};
 		HttpResponseMessage? response = await this.SendAsync(requestMessage, canReadContent: true);
 		if (response is { IsSuccessStatusCode: true })

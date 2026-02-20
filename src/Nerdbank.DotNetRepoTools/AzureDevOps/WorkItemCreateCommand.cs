@@ -4,7 +4,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using NuGet.Protocol;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
@@ -100,13 +99,14 @@ internal class WorkItemCreateCommand : WorkItemCommandBase
 		{
 			Content = JsonContent.Create(
 				patches,
+				SourceGenerationContext.Default.ListJsonPatch,
 				mediaType: new("application/json-patch+json")),
 		};
 
 		HttpResponseMessage? response = await this.SendAsync(request, canReadContent: false);
 		if (this.IsSuccessResponse(response))
 		{
-			JsonNode? content = await response.Content.ReadFromJsonAsync<JsonNode>();
+			JsonNode? content = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.JsonNode);
 			if (content?["id"] is JsonValue bugId)
 			{
 				this.Out.WriteLine($"Created bug #{bugId.GetValue<int>()}");

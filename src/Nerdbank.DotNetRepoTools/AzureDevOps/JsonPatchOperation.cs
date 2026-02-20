@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(JsonStringEnumConverter<JsonPatchOperation>))]
 internal enum JsonPatchOperation
 {
 #pragma warning disable SA1300 // Element should begin with upper-case letter
