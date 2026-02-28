@@ -21,6 +21,7 @@ internal abstract class BranchCommandBase : RepoCommandBase
 		{
 			BranchFavoriteCommand.CreateCommand(),
 			BranchUnfavoriteCommand.CreateCommand(),
+			BranchPushesCommand.CreateCommand(),
 		};
 
 		return command;
