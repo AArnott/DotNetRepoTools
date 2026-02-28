@@ -19,6 +19,12 @@ namespace Nerdbank.DotNetRepoTools;
 [JsonSerializable(typeof(GitRefFavorite))]
 [JsonSerializable(typeof(AzDOArray<GitRefFavorite>))]
 [JsonSerializable(typeof(GitRepository))]
+[JsonSerializable(typeof(GitPush))]
+[JsonSerializable(typeof(GitPush[]))]
+[JsonSerializable(typeof(AzDOArray<GitPush>))]
+[JsonSerializable(typeof(GitRefUpdate))]
+[JsonSerializable(typeof(GitCommitRef))]
+[JsonSerializable(typeof(AzDOArray<GitCommitRef>))]
 [JsonSerializable(typeof(JsonNode))]
 [JsonSerializable(typeof(List<JsonPatch>))]
 internal partial class SourceGenerationContext : JsonSerializerContext
