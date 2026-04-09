@@ -13,6 +13,7 @@
     <PackageReference Include="Azure.Identity" />
     <PackageReference Include="Microsoft.Build" PrivateAssets="compile" ExcludeAssets="runtime" />
     <PackageReference Include="Microsoft.Build.Locator" />
+    <PackageReference Include="Microsoft.VisualStudio.SolutionPersistence" />
     <PackageReference Include="Microsoft.VisualStudio.Validation" />
     <PackageReference Include="NuGet.Commands" PrivateAssets="compile" />
     <PackageReference Include="NuGet.Frameworks" PrivateAssets="compile" ExcludeAssets="runtime" />
