@@ -20,10 +20,11 @@ Options:
   -?, -h, --help  Show help and usage information
 
 Commands:
-  graph <input> <output>  Builds an MSBuild project graph and writes it as DGML.
+  graph <input> <output>  Builds an MSBuild project graph and writes it as DGML or Mermaid.
   nuget                   NuGet maintenance commands
   git                     Git repo maintenance workflows
-  azdo                    Azure DevOps operations```
+  azdo                    Azure DevOps operations
+```
 
 You can then drill in to reveal sub-commands:
 

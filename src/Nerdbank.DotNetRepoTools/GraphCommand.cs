@@ -13,7 +13,7 @@ using Microsoft.VisualStudio.SolutionPersistence.Serializer;
 namespace Nerdbank.DotNetRepoTools;
 
 /// <summary>
-/// Builds an MSBuild project graph and writes it to a DGML file.
+/// Builds an MSBuild project graph and writes it to a file.
 /// </summary>
 public class GraphCommand : MSBuildCommandBase
 {
@@ -49,6 +49,22 @@ public class GraphCommand : MSBuildCommandBase
 	{
 	}
 
+	/// <summary>
+	/// Specifies the output format for the rendered graph.
+	/// </summary>
+	public enum GraphOutputFormat
+	{
+		/// <summary>
+		/// Writes the graph as DGML.
+		/// </summary>
+		Dgml,
+
+		/// <summary>
+		/// Writes the graph as a Mermaid flowchart.
+		/// </summary>
+		Mermaid,
+	}
+
 	private enum InputKind
 	{
 		Project,
@@ -62,18 +78,28 @@ public class GraphCommand : MSBuildCommandBase
 	public required string InputPath { get; init; }
 
 	/// <summary>
-	/// Gets the output DGML file path.
+	/// Gets the output file path.
 	/// </summary>
 	public string? OutputPath { get; init; }
 
 	/// <summary>
-	/// Gets the glob patterns for project files that should be omitted from the DGML.
+	/// Gets the output format.
+	/// </summary>
+	public GraphOutputFormat OutputFormat { get; init; }
+
+	/// <summary>
+	/// Gets a value indicating whether the output format was explicitly specified.
+	/// </summary>
+	public bool IsOutputFormatSpecified { get; init; }
+
+	/// <summary>
+	/// Gets the glob patterns for project files that should be omitted from the rendered graph.
 	/// Relative patterns are resolved against the current working directory.
 	/// </summary>
 	public string[]? ExcludedProjectPaths { get; init; }
 
 	/// <summary>
-	/// Gets the directory paths that should be emitted as DGML containers.
+	/// Gets the directory paths that should be emitted as group containers.
 	/// Relative paths are resolved against the current working directory.
 	/// </summary>
 	public string[]? GroupPaths { get; init; }
@@ -97,28 +123,33 @@ public class GraphCommand : MSBuildCommandBase
 		Argument<string?> outputArgument = new("output")
 		{
 			Arity = ArgumentArity.ZeroOrOne,
-			Description = "The DGML file to write. Defaults to the input path with a .dgml extension.",
+			Description = "The output file to write. Defaults to the input path with an extension that matches the selected format.",
+		};
+		Option<GraphOutputFormat> formatOption = new("--format", "-f")
+		{
+			Description = "The output format to write. Supported values include Dgml and Mermaid.",
 		};
 		Option<string[]> excludeOption = new("--exclude", "-e")
 		{
-			Description = "One or more glob patterns matched against project paths to omit from the DGML. Relative patterns are resolved against the current working directory.",
+			Description = "One or more glob patterns matched against project paths to omit from the rendered graph. Relative patterns are resolved against the current working directory.",
 			AllowMultipleArgumentsPerToken = true,
 		};
 		Option<string[]> groupOption = new("--group", "-g")
 		{
-			Description = "One or more directory paths that should become DGML containers. Relative paths are resolved against the current working directory.",
+			Description = "One or more directory paths that should become group containers. Relative paths are resolved against the current working directory.",
 			AllowMultipleArgumentsPerToken = true,
 		};
 		Option<string[]> highlightProjectsOption = new("--highlight-projects", "-s")
 		{
-			Description = "One or more glob patterns matched against project paths. Each pattern assigns matching projects to a distinct highlighted DGML category. Relative patterns are resolved against the current working directory.",
+			Description = "One or more glob patterns matched against project paths. Each pattern assigns matching projects to a distinct highlight category. Relative patterns are resolved against the current working directory.",
 			AllowMultipleArgumentsPerToken = true,
 		};
 
-		Command command = new("graph", "Builds an MSBuild project graph and writes it as DGML.")
+		Command command = new("graph", "Builds an MSBuild project graph and writes it as DGML or Mermaid.")
 		{
 			inputArgument,
 			outputArgument,
+			formatOption,
 			excludeOption,
 			groupOption,
 			highlightProjectsOption,
@@ -127,6 +158,8 @@ public class GraphCommand : MSBuildCommandBase
 		{
 			InputPath = parseResult.GetValue(inputArgument)!,
 			OutputPath = parseResult.GetValue(outputArgument),
+			OutputFormat = parseResult.GetValue(formatOption),
+			IsOutputFormatSpecified = parseResult.CommandResult.Children.OfType<System.CommandLine.Parsing.OptionResult>().Any(optionResult => ReferenceEquals(optionResult.Option, formatOption)),
 			ExcludedProjectPaths = parseResult.GetValue(excludeOption),
 			GroupPaths = parseResult.GetValue(groupOption),
 			HighlightProjectPatterns = parseResult.GetValue(highlightProjectsOption),
@@ -154,9 +187,10 @@ public class GraphCommand : MSBuildCommandBase
 			return;
 		}
 
+		GraphOutputFormat outputFormat = ResolveOutputFormat(this.OutputPath, this.OutputFormat, this.IsOutputFormatSpecified);
 		string outputPath = this.OutputPath is not null
 			? Path.GetFullPath(this.OutputPath)
-			: Path.ChangeExtension(fullInputPath, ".dgml");
+			: Path.ChangeExtension(fullInputPath, GetDefaultFileExtension(outputFormat));
 		HashSet<string> groupingPaths = NormalizePathsRelativeTo(Environment.CurrentDirectory, this.GroupPaths);
 		IReadOnlyList<Regex> excludedProjectPathPatterns = CreatePathGlobPatternsRelativeTo(Environment.CurrentDirectory, this.ExcludedProjectPaths);
 		IReadOnlyList<ProjectHighlightRuleModel> highlightRules = CreateProjectHighlightRulesRelativeTo(Environment.CurrentDirectory, this.HighlightProjectPatterns);
@@ -167,10 +201,9 @@ public class GraphCommand : MSBuildCommandBase
 			GraphModel graphModel = graphInput.EntryPoints.Count > 0
 				? BuildGraphModel(new ProjectGraph(graphInput.EntryPoints), graphInput.ExplicitSolutionProjects, excludedProjectPathPatterns, groupingPaths, highlightRules, fullInputPath, graphInput.InputKind)
 				: new GraphModel([], [], []);
-			XDocument dgml = CreateDgml(graphModel);
 
 			Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-			dgml.Save(outputPath);
+			WriteGraph(outputPath, graphModel, outputFormat);
 			this.Out.WriteLine($"Wrote {graphModel.Nodes.Count} node(s) and {graphModel.Edges.Count} edge(s) to {outputPath}");
 		}
 		catch (Exception ex)
@@ -448,6 +481,61 @@ public class GraphCommand : MSBuildCommandBase
 		return string.IsNullOrEmpty(label) ? containerPath : label;
 	}
 
+	private static GraphOutputFormat ResolveOutputFormat(string? outputPath, GraphOutputFormat outputFormat, bool isOutputFormatSpecified)
+	{
+		if (isOutputFormatSpecified || string.IsNullOrEmpty(outputPath))
+		{
+			return outputFormat;
+		}
+
+		return TryGetOutputFormatFromFileExtension(outputPath, out GraphOutputFormat inferredFormat)
+			? inferredFormat
+			: outputFormat;
+	}
+
+	private static bool TryGetOutputFormatFromFileExtension(string outputPath, out GraphOutputFormat outputFormat)
+	{
+		string extension = Path.GetExtension(outputPath);
+		if (extension.Equals(".dgml", StringComparison.OrdinalIgnoreCase))
+		{
+			outputFormat = GraphOutputFormat.Dgml;
+			return true;
+		}
+
+		if (extension.Equals(".mmd", StringComparison.OrdinalIgnoreCase)
+			|| extension.Equals(".mermaid", StringComparison.OrdinalIgnoreCase))
+		{
+			outputFormat = GraphOutputFormat.Mermaid;
+			return true;
+		}
+
+		outputFormat = default;
+		return false;
+	}
+
+	private static string GetDefaultFileExtension(GraphOutputFormat outputFormat)
+		=> outputFormat switch
+		{
+			GraphOutputFormat.Dgml => ".dgml",
+			GraphOutputFormat.Mermaid => ".mmd",
+			_ => throw new InvalidOperationException($"Unsupported graph output format '{outputFormat}'."),
+		};
+
+	private static void WriteGraph(string outputPath, GraphModel graphModel, GraphOutputFormat outputFormat)
+	{
+		switch (outputFormat)
+		{
+			case GraphOutputFormat.Dgml:
+				CreateDgml(graphModel).Save(outputPath);
+				break;
+			case GraphOutputFormat.Mermaid:
+				File.WriteAllText(outputPath, CreateMermaidFlowchart(graphModel));
+				break;
+			default:
+				throw new InvalidOperationException($"Unsupported graph output format '{outputFormat}'.");
+		}
+	}
+
 	private static XDocument CreateDgml(GraphModel graphModel)
 	{
 		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
@@ -550,6 +638,147 @@ public class GraphCommand : MSBuildCommandBase
 				new XAttribute("GraphDirection", "LeftToRight"),
 				directedGraphChildren));
 	}
+
+	private static string CreateMermaidFlowchart(GraphModel graphModel)
+	{
+		StringBuilder builder = new();
+		builder.AppendLine("flowchart TD");
+
+		IReadOnlyDictionary<string, GraphNodeModel> nodesById = graphModel.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
+		Dictionary<string, int> orderById = graphModel.Nodes
+			.Select((node, index) => new KeyValuePair<string, int>(node.Id, index))
+			.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+		Dictionary<string, string> mermaidIdsByGraphId = graphModel.Nodes
+			.Select((node, index) => new KeyValuePair<string, string>(node.Id, $"n{index + 1}"))
+			.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+		ILookup<string, string> containedChildrenBySource = graphModel.Edges
+			.Where(edge => edge.Category == ContainsCategory)
+			.ToLookup(edge => edge.SourceId, edge => edge.TargetId, StringComparer.Ordinal);
+		HashSet<string> containedNodeIds = graphModel.Edges
+			.Where(edge => edge.Category == ContainsCategory)
+			.Select(edge => edge.TargetId)
+			.ToHashSet(StringComparer.Ordinal);
+		HashSet<string> emptyContainerPlaceholderIds = [];
+
+		foreach (GraphNodeModel rootNode in graphModel.Nodes.Where(node => !containedNodeIds.Contains(node.Id)))
+		{
+			AppendMermaidNode(builder, rootNode, nodesById, mermaidIdsByGraphId, containedChildrenBySource, orderById, emptyContainerPlaceholderIds, indentationLevel: 1);
+		}
+
+		foreach (GraphEdgeModel edge in graphModel.Edges.Where(edge => edge.Category == ProjectReferenceCategory))
+		{
+			builder.Append("    ");
+			builder.Append(mermaidIdsByGraphId[edge.SourceId]);
+			builder.Append(" --> ");
+			builder.Append(mermaidIdsByGraphId[edge.TargetId]);
+			builder.AppendLine();
+		}
+
+		AppendMermaidHighlightStyles(builder, graphModel, mermaidIdsByGraphId);
+		if (emptyContainerPlaceholderIds.Count > 0)
+		{
+			builder.AppendLine("    classDef hidden fill:transparent,stroke:transparent,color:transparent;");
+			builder.Append("    class ");
+			builder.Append(string.Join(',', emptyContainerPlaceholderIds.OrderBy(id => id, StringComparer.Ordinal)));
+			builder.AppendLine(" hidden;");
+		}
+
+		return builder.ToString();
+	}
+
+	private static void AppendMermaidNode(
+		StringBuilder builder,
+		GraphNodeModel node,
+		IReadOnlyDictionary<string, GraphNodeModel> nodesById,
+		IReadOnlyDictionary<string, string> mermaidIdsByGraphId,
+		ILookup<string, string> containedChildrenBySource,
+		IReadOnlyDictionary<string, int> orderById,
+		ISet<string> emptyContainerPlaceholderIds,
+		int indentationLevel)
+	{
+		string indentation = new(' ', indentationLevel * 4);
+		string mermaidId = mermaidIdsByGraphId[node.Id];
+		if (node.IsContainer)
+		{
+			builder.Append(indentation);
+			builder.Append("subgraph ");
+			builder.Append(mermaidId);
+			builder.Append("[\"");
+			builder.Append(EscapeMermaidLabel(node.Label));
+			builder.AppendLine("\"]");
+
+			List<GraphNodeModel> children = containedChildrenBySource[node.Id]
+				.Select(childId => nodesById[childId])
+				.OrderBy(child => orderById[child.Id])
+				.ToList();
+			if (children.Count == 0)
+			{
+				string placeholderId = $"{mermaidId}_empty";
+				emptyContainerPlaceholderIds.Add(placeholderId);
+				builder.Append(indentation);
+				builder.Append("    ");
+				builder.Append(placeholderId);
+				builder.AppendLine("[\"\"]");
+			}
+			else
+			{
+				foreach (GraphNodeModel child in children)
+				{
+					AppendMermaidNode(builder, child, nodesById, mermaidIdsByGraphId, containedChildrenBySource, orderById, emptyContainerPlaceholderIds, indentationLevel + 1);
+				}
+			}
+
+			builder.Append(indentation);
+			builder.AppendLine("end");
+		}
+		else
+		{
+			builder.Append(indentation);
+			builder.Append(mermaidId);
+			builder.Append("[\"");
+			builder.Append(EscapeMermaidLabel(node.Label));
+			builder.AppendLine("\"]");
+		}
+	}
+
+	private static void AppendMermaidHighlightStyles(StringBuilder builder, GraphModel graphModel, IReadOnlyDictionary<string, string> mermaidIdsByGraphId)
+	{
+		IReadOnlyDictionary<string, string> cssClassesByCategoryId = graphModel.HighlightCategories
+			.Select((category, index) => new KeyValuePair<string, string>(category.Id, $"highlight{index + 1}"))
+			.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+
+		foreach (GraphHighlightCategoryModel category in graphModel.HighlightCategories)
+		{
+			builder.Append("    classDef ");
+			builder.Append(cssClassesByCategoryId[category.Id]);
+			builder.Append(" fill:");
+			builder.Append(category.Style.Background);
+			builder.Append(",stroke:");
+			builder.Append(category.Style.Stroke);
+			builder.Append(",color:");
+			builder.Append(category.Style.Foreground);
+			builder.AppendLine(";");
+		}
+
+		foreach (IGrouping<string, GraphNodeModel> nodesByClass in graphModel.Nodes
+			.Where(node => node.HighlightCategoryId is not null)
+			.GroupBy(node => cssClassesByCategoryId[node.HighlightCategoryId!], StringComparer.Ordinal)
+			.OrderBy(group => group.Key, StringComparer.Ordinal))
+		{
+			builder.Append("    class ");
+			builder.Append(string.Join(',', nodesByClass.Select(node => mermaidIdsByGraphId[node.Id])));
+			builder.Append(' ');
+			builder.Append(nodesByClass.Key);
+			builder.AppendLine(";");
+		}
+	}
+
+	private static string EscapeMermaidLabel(string value)
+		=> value
+			.Replace("\\", "\\\\", StringComparison.Ordinal)
+			.Replace("\"", "\\\"", StringComparison.Ordinal)
+			.Replace("\r", " ", StringComparison.Ordinal)
+			.Replace("\n", " ", StringComparison.Ordinal);
 
 	private static IReadOnlyList<ProjectHighlightRuleModel> CreateProjectHighlightRulesRelativeTo(string baseDirectory, IEnumerable<string>? patterns)
 	{
