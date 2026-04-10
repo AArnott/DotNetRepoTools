@@ -330,6 +330,42 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 	}
 
 	[Fact]
+	public async Task WritesDgmlForProjectInput_OmitsProjectsMatchingPrefixAgnosticExcludeGlob()
+	{
+		string projectRoot = Path.Combine(this.StagingDirectory, "project-root");
+		(string projectPath, string referencedProjectPath) = await this.CreateProjectGraphAsync(projectRoot);
+		string outputPath = Path.Combine(this.StagingDirectory, "graph-prefix-agnostic-pattern.dgml");
+		string originalCurrentDirectory = Environment.CurrentDirectory;
+		string workingDirectory = Path.Combine(this.StagingDirectory, "cwd");
+		Directory.CreateDirectory(workingDirectory);
+
+		try
+		{
+			Environment.CurrentDirectory = workingDirectory;
+			this.Command = new()
+			{
+				InputPath = projectPath,
+				OutputPath = outputPath,
+				ExcludedProjectPaths = [Path.Combine("**", Path.GetFileName(referencedProjectPath))],
+			};
+
+			await this.ExecuteCommandAsync();
+		}
+		finally
+		{
+			Environment.CurrentDirectory = originalCurrentDirectory;
+		}
+
+		Assert.Equal(0, this.Command.ExitCode);
+		XDocument document = XDocument.Load(outputPath);
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		Assert.Single(document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node"));
+		Assert.Empty(document.Root.Element(ns + "Links")!.Elements(ns + "Link"));
+		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(projectPath));
+		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(referencedProjectPath));
+	}
+
+	[Fact]
 	public void CreateCommand_DefinesExcludeOptionAliasAndMultipleArguments()
 	{
 		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;

@@ -640,7 +640,13 @@ public class GraphCommand : MSBuildCommandBase
 
 	private static string NormalizeGlobPatternRelativeTo(string baseDirectory, string pattern)
 	{
-		string rootedPattern = Path.IsPathRooted(pattern) ? pattern : Path.Combine(baseDirectory, pattern);
+		string normalizedPattern = pattern.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+		if (!Path.IsPathRooted(normalizedPattern) && StartsWithRecursiveDirectoryGlob(normalizedPattern))
+		{
+			return normalizedPattern.Replace(Path.DirectorySeparatorChar, '/');
+		}
+
+		string rootedPattern = Path.IsPathRooted(normalizedPattern) ? normalizedPattern : Path.Combine(baseDirectory, normalizedPattern);
 		string normalizedSeparators = rootedPattern.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
 		string root = Path.GetPathRoot(normalizedSeparators)!;
 		string[] segments = normalizedSeparators[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
@@ -658,6 +664,10 @@ public class GraphCommand : MSBuildCommandBase
 		string separator = normalizedPrefix.EndsWith("/", StringComparison.Ordinal) ? string.Empty : "/";
 		return string.IsNullOrEmpty(wildcardSuffix) ? normalizedPrefix : $"{normalizedPrefix}{separator}{wildcardSuffix}";
 	}
+
+	private static bool StartsWithRecursiveDirectoryGlob(string pattern)
+		=> pattern.Equals("**", StringComparison.Ordinal)
+		|| pattern.StartsWith($"**{Path.DirectorySeparatorChar}", StringComparison.Ordinal);
 
 	private static string NormalizeGlobComparablePath(string path)
 		=> NormalizePath(path).Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
