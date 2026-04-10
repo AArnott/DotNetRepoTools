@@ -1,6 +1,7 @@
 // Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System.Collections;
 using System.CommandLine;
 using System.Reflection;
 using System.Xml.Linq;
@@ -356,6 +357,20 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Option groupOption = Assert.Single(command.Options, option => option.Name == "--group");
 		Assert.Contains("-g", groupOption.Aliases);
 		Assert.True(groupOption.AllowMultipleArgumentsPerToken);
+	}
+
+	[Fact]
+	public void AddEdge_DoesNotCreateSelfReferentialEdge()
+	{
+		MethodInfo addEdgeMethod = typeof(GraphCommand).GetMethod("AddEdge", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Type graphEdgeModelType = typeof(GraphCommand).GetNestedType("GraphEdgeModel", BindingFlags.NonPublic)!;
+		IList edges = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(graphEdgeModelType))!;
+		HashSet<(string SourceId, string TargetId, string Category)> edgeKeys = [];
+
+		addEdgeMethod.Invoke(obj: null, ["node:1", "node:1", "Contains", edges, edgeKeys]);
+
+		Assert.Empty(edges.Cast<object>());
+		Assert.Empty(edgeKeys);
 	}
 
 	private static string CreateSolutionFileContent(string solutionPath, string projectPath, string referencedProjectPath, bool reverseProjectOrder = false)

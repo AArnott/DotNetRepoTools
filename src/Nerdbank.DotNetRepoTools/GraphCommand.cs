@@ -360,6 +360,11 @@ public class GraphCommand : MSBuildCommandBase
 		ICollection<GraphEdgeModel> edges,
 		ISet<(string SourceId, string TargetId, string Category)> edgeKeys)
 	{
+		if (sourceId == targetId)
+		{
+			return;
+		}
+
 		if (edgeKeys.Add((sourceId, targetId, category)))
 		{
 			edges.Add(new GraphEdgeModel(sourceId, targetId, category));
@@ -456,9 +461,9 @@ public class GraphCommand : MSBuildCommandBase
 						new XAttribute("Label", "Contains"),
 						new XAttribute("IsContainment", "True")),
 					new XElement(
-					ns + "Category",
-					new XAttribute("Id", ProjectReferenceCategory),
-					new XAttribute("Label", "Project Reference"))),
+						ns + "Category",
+						new XAttribute("Id", ProjectReferenceCategory),
+						new XAttribute("Label", "Project Reference"))),
 				nodesElement,
 				linksElement));
 	}
