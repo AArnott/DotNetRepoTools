@@ -651,7 +651,8 @@ public class GraphCommand : MSBuildCommandBase
 			: Path.Combine(root, Path.Combine(segments[..firstWildcardSegment]));
 		string normalizedPrefix = NormalizeGlobComparablePath(fixedPrefix);
 		string wildcardSuffix = string.Join('/', segments[firstWildcardSegment..].Select(segment => segment.Replace(Path.AltDirectorySeparatorChar, '/').Replace(Path.DirectorySeparatorChar, '/')));
-		return string.IsNullOrEmpty(wildcardSuffix) ? normalizedPrefix : $"{normalizedPrefix}/{wildcardSuffix}";
+		string separator = normalizedPrefix.EndsWith("/", StringComparison.Ordinal) ? string.Empty : "/";
+		return string.IsNullOrEmpty(wildcardSuffix) ? normalizedPrefix : $"{normalizedPrefix}{separator}{wildcardSuffix}";
 	}
 
 	private static string NormalizeGlobComparablePath(string path)
@@ -697,8 +698,9 @@ public class GraphCommand : MSBuildCommandBase
 		|| IsPathDescendantOf(path, candidatePath);
 
 	private static bool PathMatchesPrefix(string path, string candidatePath, bool allowExactMatch)
-		=> (allowExactMatch && path.Equals(candidatePath, StringComparison.OrdinalIgnoreCase))
-		|| IsPathDescendantOf(path, candidatePath);
+		=> allowExactMatch
+			? IsPathEqualOrDescendantOf(path, candidatePath)
+			: IsPathDescendantOf(path, candidatePath);
 
 	private static bool IsPathDescendantOf(string path, string candidatePath)
 		=> path.Length > candidatePath.Length

@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.SolutionPersistence;
 using Microsoft.VisualStudio.SolutionPersistence.Model;
 using Microsoft.VisualStudio.SolutionPersistence.Serializer;
 
+[Collection(nameof(CurrentDirectorySensitiveTestCollection))]
 public class GraphCommandTests : CommandTestBase<GraphCommand>
 {
 	public GraphCommandTests(ITestOutputHelper logger)
@@ -259,6 +260,29 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(projectPath));
 		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(includedProjectPath));
 		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(excludedProjectPath));
+	}
+
+	[Fact]
+	public async Task WritesDgmlForProjectInput_OmitsProjectsMatchingAbsoluteRootedExcludeGlob()
+	{
+		(string projectPath, string referencedProjectPath) = await this.CreateProjectGraphAsync();
+		string outputPath = Path.Combine(this.StagingDirectory, "graph-rooted-pattern.dgml");
+		this.Command = new()
+		{
+			InputPath = projectPath,
+			OutputPath = outputPath,
+			ExcludedProjectPaths = [Path.Combine(Path.GetPathRoot(referencedProjectPath)!, "**", Path.GetFileName(referencedProjectPath))],
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		XDocument document = XDocument.Load(outputPath);
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		Assert.Single(document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node"));
+		Assert.Empty(document.Root.Element(ns + "Links")!.Elements(ns + "Link"));
+		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(projectPath));
+		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(referencedProjectPath));
 	}
 
 	[Fact]
