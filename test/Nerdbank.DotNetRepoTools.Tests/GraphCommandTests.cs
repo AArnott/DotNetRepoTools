@@ -227,7 +227,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 	}
 
 	[Fact]
-	public async Task WritesDgmlForProjectInput_OmitsProjectsUnderExcludedPathPrefixButNotSiblingPrefix()
+	public async Task WritesDgmlForProjectInput_OmitsProjectsMatchingExcludeGlobButNotSiblingPath()
 	{
 		(string projectPath, string excludedProjectPath, string includedProjectPath) = await this.CreateProjectGraphWithSimilarPrefixPathsAsync();
 		string outputPath = Path.Combine(this.StagingDirectory, "graph-prefix.dgml");
@@ -241,7 +241,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 			{
 				InputPath = projectPath,
 				OutputPath = outputPath,
-				ExcludedProjectPaths = ["subpath"],
+				ExcludedProjectPaths = [Path.Combine("subpath", "**", "*.csproj")],
 			};
 
 			await this.ExecuteCommandAsync();

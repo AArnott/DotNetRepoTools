@@ -67,8 +67,8 @@ public class GraphCommand : MSBuildCommandBase
 	public string? OutputPath { get; init; }
 
 	/// <summary>
-	/// Gets the paths or path prefixes to project files that should be omitted from the DGML.
-	/// Relative paths are resolved against the current working directory.
+	/// Gets the glob patterns for project files that should be omitted from the DGML.
+	/// Relative patterns are resolved against the current working directory.
 	/// </summary>
 	public string[]? ExcludedProjectPaths { get; init; }
 
@@ -101,7 +101,7 @@ public class GraphCommand : MSBuildCommandBase
 		};
 		Option<string[]> excludeOption = new("--exclude", "-e")
 		{
-			Description = "One or more project file paths or path prefixes to omit from the DGML. Relative paths are resolved against the current working directory.",
+			Description = "One or more glob patterns matched against project paths to omit from the DGML. Relative patterns are resolved against the current working directory.",
 			AllowMultipleArgumentsPerToken = true,
 		};
 		Option<string[]> groupOption = new("--group", "-g")
@@ -157,15 +157,15 @@ public class GraphCommand : MSBuildCommandBase
 		string outputPath = this.OutputPath is not null
 			? Path.GetFullPath(this.OutputPath)
 			: Path.ChangeExtension(fullInputPath, ".dgml");
-		HashSet<string> excludedProjectPaths = NormalizePathsRelativeTo(Environment.CurrentDirectory, this.ExcludedProjectPaths);
 		HashSet<string> groupingPaths = NormalizePathsRelativeTo(Environment.CurrentDirectory, this.GroupPaths);
+		IReadOnlyList<Regex> excludedProjectPathPatterns = CreatePathGlobPatternsRelativeTo(Environment.CurrentDirectory, this.ExcludedProjectPaths);
 		IReadOnlyList<ProjectHighlightRuleModel> highlightRules = CreateProjectHighlightRulesRelativeTo(Environment.CurrentDirectory, this.HighlightProjectPatterns);
 
 		try
 		{
-			GraphInput graphInput = await LoadGraphInputAsync(fullInputPath, excludedProjectPaths, this.CancellationToken);
+			GraphInput graphInput = await LoadGraphInputAsync(fullInputPath, excludedProjectPathPatterns, this.CancellationToken);
 			GraphModel graphModel = graphInput.EntryPoints.Count > 0
-				? BuildGraphModel(new ProjectGraph(graphInput.EntryPoints), graphInput.ExplicitSolutionProjects, excludedProjectPaths, groupingPaths, highlightRules, fullInputPath, graphInput.InputKind)
+				? BuildGraphModel(new ProjectGraph(graphInput.EntryPoints), graphInput.ExplicitSolutionProjects, excludedProjectPathPatterns, groupingPaths, highlightRules, fullInputPath, graphInput.InputKind)
 				: new GraphModel([], [], []);
 			XDocument dgml = CreateDgml(graphModel);
 
@@ -196,7 +196,7 @@ public class GraphCommand : MSBuildCommandBase
 		return string.Join(Environment.NewLine + "Caused by: ", messages);
 	}
 
-	private static async Task<GraphInput> LoadGraphInputAsync(string inputPath, IReadOnlySet<string> excludedProjectPaths, CancellationToken cancellationToken)
+	private static async Task<GraphInput> LoadGraphInputAsync(string inputPath, IReadOnlyList<Regex> excludedProjectPathPatterns, CancellationToken cancellationToken)
 	{
 		string extension = Path.GetExtension(inputPath);
 		if (!extension.Equals(".sln", StringComparison.OrdinalIgnoreCase)
@@ -204,7 +204,7 @@ public class GraphCommand : MSBuildCommandBase
 		{
 			return new GraphInput(
 			InputKind.Project,
-			IsExcludedProjectPath(inputPath, excludedProjectPaths) ? [] : [new ProjectGraphEntryPoint(inputPath)],
+			IsExcludedProjectPath(inputPath, excludedProjectPathPatterns) ? [] : [new ProjectGraphEntryPoint(inputPath)],
 			new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 		}
 
@@ -217,7 +217,7 @@ public class GraphCommand : MSBuildCommandBase
 		foreach (SolutionProjectModel solutionProject in solutionModel.SolutionProjects)
 		{
 			string projectPath = NormalizePathRelativeTo(solutionDirectory, solutionProject.FilePath);
-			if (IsExcludedProjectPath(projectPath, excludedProjectPaths))
+			if (IsExcludedProjectPath(projectPath, excludedProjectPathPatterns))
 			{
 				continue;
 			}
@@ -232,7 +232,7 @@ public class GraphCommand : MSBuildCommandBase
 			explicitProjects);
 	}
 
-	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlySet<string> excludedProjectPaths, IReadOnlySet<string> groupingPaths, IReadOnlyList<ProjectHighlightRuleModel> highlightRules, string inputPath, InputKind inputKind)
+	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlyList<Regex> excludedProjectPathPatterns, IReadOnlySet<string> groupingPaths, IReadOnlyList<ProjectHighlightRuleModel> highlightRules, string inputPath, InputKind inputKind)
 	{
 		Dictionary<string, GraphNodeModel> projectNodesByPath = new(StringComparer.OrdinalIgnoreCase);
 		List<GraphNodeModel> containerNodes = [];
@@ -243,7 +243,7 @@ public class GraphCommand : MSBuildCommandBase
 		foreach (ProjectGraphNode graphNode in projectGraph.ProjectNodes)
 		{
 			string sourcePath = NormalizePath(graphNode.ProjectInstance.FullPath);
-			if (IsExcludedProjectPath(sourcePath, excludedProjectPaths))
+			if (IsExcludedProjectPath(sourcePath, excludedProjectPathPatterns))
 			{
 				continue;
 			}
@@ -253,7 +253,7 @@ public class GraphCommand : MSBuildCommandBase
 			foreach (ProjectGraphNode projectReference in graphNode.ProjectReferences)
 			{
 				string targetPath = NormalizePath(projectReference.ProjectInstance.FullPath);
-				if (IsExcludedProjectPath(targetPath, excludedProjectPaths))
+				if (IsExcludedProjectPath(targetPath, excludedProjectPathPatterns))
 				{
 					continue;
 				}
@@ -556,15 +556,31 @@ public class GraphCommand : MSBuildCommandBase
 
 		List<ProjectHighlightRuleModel> rules = [];
 		int index = 0;
-		foreach (string pattern in patterns)
+		foreach (Regex pattern in CreatePathGlobPatternsRelativeTo(baseDirectory, patterns))
 		{
 			GraphHighlightStyleModel style = HighlightStyles[index % HighlightStyles.Count];
 			GraphHighlightCategoryModel category = new(
 				$"{HighlightProjectCategoryPrefix}:{index + 1}",
 				$"Project Highlight {index + 1}",
 				style);
-			rules.Add(new ProjectHighlightRuleModel(CreateGlobRegex(NormalizeGlobPatternRelativeTo(baseDirectory, pattern)), category));
+			rules.Add(new ProjectHighlightRuleModel(pattern, category));
 			index++;
+		}
+
+		return rules;
+	}
+
+	private static IReadOnlyList<Regex> CreatePathGlobPatternsRelativeTo(string baseDirectory, IEnumerable<string>? patterns)
+	{
+		if (patterns is null)
+		{
+			return [];
+		}
+
+		List<Regex> rules = [];
+		foreach (string pattern in patterns)
+		{
+			rules.Add(CreateGlobRegex(NormalizeGlobPatternRelativeTo(baseDirectory, pattern)));
 		}
 
 		return rules;
@@ -657,11 +673,12 @@ public class GraphCommand : MSBuildCommandBase
 		return normalizedPaths;
 	}
 
-	private static bool IsExcludedProjectPath(string projectPath, IReadOnlySet<string> excludedProjectPaths)
+	private static bool IsExcludedProjectPath(string projectPath, IReadOnlyList<Regex> excludedProjectPathPatterns)
 	{
-		foreach (string excludedProjectPath in excludedProjectPaths)
+		string comparablePath = NormalizeGlobComparablePath(projectPath);
+		foreach (Regex excludedProjectPathPattern in excludedProjectPathPatterns)
 		{
-			if (IsPathEqualOrDescendantOf(projectPath, excludedProjectPath))
+			if (excludedProjectPathPattern.IsMatch(comparablePath))
 			{
 				return true;
 			}
