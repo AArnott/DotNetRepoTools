@@ -41,6 +41,69 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 	}
 
 	[Fact]
+	public async Task WritesMermaidForProjectInput()
+	{
+		(string projectPath, _) = await this.CreateProjectGraphAsync();
+		string outputPath = Path.Combine(this.StagingDirectory, "graph.mmd");
+		this.Command = new()
+		{
+			InputPath = projectPath,
+			OutputPath = outputPath,
+			OutputFormat = GraphCommand.GraphOutputFormat.Mermaid,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		Assert.StartsWith("flowchart ", mermaid, StringComparison.Ordinal);
+		Assert.Contains("[\"App.csproj\"]", mermaid);
+		Assert.Contains("[\"Lib.csproj\"]", mermaid);
+		Assert.Contains(" --> ", mermaid);
+		Assert.Contains("Wrote 2 node(s) and 1 edge(s)", ((StringWriter)this.Command.Out).ToString());
+	}
+
+	[Fact]
+	public async Task InfersMermaidFormatFromOutputExtensionWhenFormatOptionOmitted()
+	{
+		(string projectPath, _) = await this.CreateProjectGraphAsync();
+		string outputPath = Path.Combine(this.StagingDirectory, "graph.mmd");
+		this.Command = new()
+		{
+			InputPath = projectPath,
+			OutputPath = outputPath,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		Assert.StartsWith("flowchart ", mermaid, StringComparison.Ordinal);
+		Assert.Contains("[\"App.csproj\"]", mermaid);
+	}
+
+	[Fact]
+	public async Task ExplicitFormatOverridesOutputExtension()
+	{
+		(string projectPath, _) = await this.CreateProjectGraphAsync();
+		string outputPath = Path.Combine(this.StagingDirectory, "graph.dgml");
+		this.Command = new()
+		{
+			InputPath = projectPath,
+			OutputPath = outputPath,
+			OutputFormat = GraphCommand.GraphOutputFormat.Mermaid,
+			IsOutputFormatSpecified = true,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		string content = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		Assert.StartsWith("flowchart ", content, StringComparison.Ordinal);
+		Assert.DoesNotContain("<DirectedGraph", content);
+	}
+
+	[Fact]
 	public async Task WritesDgmlForSolutionInput()
 	{
 		(string projectPath, string referencedProjectPath) = await this.CreateProjectGraphAsync();
@@ -376,6 +439,15 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 	}
 
 	[Fact]
+	public void CreateCommand_DefinesFormatOptionAlias()
+	{
+		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
+		Option formatOption = Assert.Single(command.Options, option => option.Name == "--format");
+		Assert.Contains("-f", formatOption.Aliases);
+	}
+
+	[Fact]
 	public async Task WritesDgmlForProjectInput_GroupsProjectsUsingAbsoluteAndWorkingDirectoryRelativePaths()
 	{
 		(string projectPath, string parentGroupPath, string childGroupPath, string siblingProjectPath, string nestedProjectPath, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
@@ -543,6 +615,55 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.NotEqual(
 			GetStyleSetterValue(styles, appCategoryId, "Background"),
 			GetStyleSetterValue(styles, nestedCategoryId, "Background"));
+	}
+
+	[Fact]
+	public async Task WritesMermaidForProjectInput_GroupsProjectsAndHighlights()
+	{
+		(string projectPath, string parentGroupPath, string childGroupPath, string siblingProjectPath, string nestedProjectPath, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
+		string outputPath = Path.Combine(this.StagingDirectory, "graph-highlighted.mmd");
+		string originalCurrentDirectory = Environment.CurrentDirectory;
+		string workingDirectory = Path.Combine(this.StagingDirectory, "cwd");
+		Directory.CreateDirectory(workingDirectory);
+
+		try
+		{
+			Environment.CurrentDirectory = workingDirectory;
+			this.Command = new()
+			{
+				InputPath = projectPath,
+				OutputPath = outputPath,
+				OutputFormat = GraphCommand.GraphOutputFormat.Mermaid,
+				GroupPaths = [parentGroupPath, Path.GetRelativePath(workingDirectory, childGroupPath)],
+				HighlightProjectPatterns =
+				[
+					Path.Combine("..", "src", "Copilot", "App", "*.csproj"),
+					Path.Combine(Path.GetRelativePath(workingDirectory, childGroupPath), "*.csproj"),
+				],
+			};
+
+			await this.ExecuteCommandAsync();
+		}
+		finally
+		{
+			Environment.CurrentDirectory = originalCurrentDirectory;
+		}
+
+		Assert.Equal(0, this.Command.ExitCode);
+		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		Assert.StartsWith("flowchart ", mermaid, StringComparison.Ordinal);
+		Assert.Contains("subgraph", mermaid);
+		Assert.Contains("[\"Copilot\"]", mermaid);
+		Assert.Contains("[\"tests\"]", mermaid);
+		Assert.Contains("[\"Shared.csproj\"]", mermaid);
+		Assert.Contains("[\"Tests.csproj\"]", mermaid);
+		Assert.Contains("[\"Other.csproj\"]", mermaid);
+		Assert.Contains("classDef highlight1 fill:#DBEAFE,stroke:#2563EB,color:#172554;", mermaid);
+		Assert.Contains("classDef highlight2 fill:#DCFCE7,stroke:#16A34A,color:#052E16;", mermaid);
+		Assert.Contains("class ", mermaid);
+		Assert.Contains(" --> ", mermaid);
+		Assert.DoesNotContain("Other.csproj\"] highlight", mermaid);
+		Assert.DoesNotContain("Shared.csproj\"] highlight", mermaid);
 	}
 
 	private static string CreateSolutionFileContent(string solutionPath, string projectPath, string referencedProjectPath, bool reverseProjectOrder = false)
