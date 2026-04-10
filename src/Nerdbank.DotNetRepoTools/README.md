@@ -4,7 +4,7 @@
 
 After install, use the tool name `repo` to run commands.
 
-This CLI tool has (or will have) a variety of commands and sub-commands, discoverable using the `-h` switch to discover commands, sub-commands, and switches.
+This CLI tool has a variety of commands and sub-commands, discoverable using the `-h` switch to discover commands, sub-commands, and switches.
 
 ```
 $ repo -?
@@ -20,8 +20,10 @@ Options:
   -?, -h, --help  Show help and usage information
 
 Commands:
-  nuget  NuGet maintenance commands
-```
+  graph <input> <output>  Builds an MSBuild project graph and writes it as DGML.
+  nuget                   NuGet maintenance commands
+  git                     Git repo maintenance workflows
+  azdo                    Azure DevOps operations```
 
 You can then drill in to reveal sub-commands:
 
