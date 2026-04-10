@@ -19,6 +19,7 @@ internal static class Program
 	{
 		RootCommand root = new($"A CLI tool with commands to help maintain .NET codebases.")
 		{
+			GraphCommand.CreateCommand(),
 			NuGetCommand.CreateCommand(),
 			GitCommand.CreateCommand(),
 			AzureDevOpsCommandBase.CreateCommand(),
