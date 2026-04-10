@@ -107,6 +107,50 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 	}
 
 	[Fact]
+	public async Task WritesDgmlWithStableNodeIdsAcrossDifferentAbsoluteRoots()
+	{
+		string firstRoot = Path.Combine(this.StagingDirectory, "first-root");
+		string secondRoot = Path.Combine(this.StagingDirectory, "second-root");
+		(string firstProjectPath, string firstReferencedProjectPath) = await this.CreateProjectGraphAsync(firstRoot);
+		(string secondProjectPath, string secondReferencedProjectPath) = await this.CreateProjectGraphAsync(secondRoot);
+		string firstOutputPath = Path.Combine(firstRoot, "graph.dgml");
+		string secondOutputPath = Path.Combine(secondRoot, "graph.dgml");
+		string originalCurrentDirectory = Environment.CurrentDirectory;
+
+		try
+		{
+			Environment.CurrentDirectory = firstRoot;
+			this.Command = new()
+			{
+				InputPath = firstProjectPath,
+				OutputPath = firstOutputPath,
+			};
+
+			await this.ExecuteCommandAsync();
+			Assert.Equal(0, this.Command.ExitCode);
+
+			Environment.CurrentDirectory = secondRoot;
+			this.Command = new()
+			{
+				InputPath = secondProjectPath,
+				OutputPath = secondOutputPath,
+			};
+
+			await this.ExecuteCommandAsync();
+			Assert.Equal(0, this.Command.ExitCode);
+		}
+		finally
+		{
+			Environment.CurrentDirectory = originalCurrentDirectory;
+		}
+
+		XDocument firstDocument = XDocument.Load(firstOutputPath);
+		XDocument secondDocument = XDocument.Load(secondOutputPath);
+		Assert.Equal(GetNodeIdByPath(firstDocument, firstProjectPath), GetNodeIdByPath(secondDocument, secondProjectPath));
+		Assert.Equal(GetNodeIdByPath(firstDocument, firstReferencedProjectPath), GetNodeIdByPath(secondDocument, secondReferencedProjectPath));
+	}
+
+	[Fact]
 	public async Task WritesContainsLinksForSlnxInput()
 	{
 		(string projectPath, _) = await this.CreateProjectGraphAsync();
@@ -275,6 +319,42 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		};
 
 		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		XDocument document = XDocument.Load(outputPath);
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		Assert.Single(document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node"));
+		Assert.Empty(document.Root.Element(ns + "Links")!.Elements(ns + "Link"));
+		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(projectPath));
+		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(referencedProjectPath));
+	}
+
+	[Fact]
+	public async Task WritesDgmlForProjectInput_OmitsProjectsMatchingPrefixAgnosticExcludeGlob()
+	{
+		string projectRoot = Path.Combine(this.StagingDirectory, "project-root");
+		(string projectPath, string referencedProjectPath) = await this.CreateProjectGraphAsync(projectRoot);
+		string outputPath = Path.Combine(this.StagingDirectory, "graph-prefix-agnostic-pattern.dgml");
+		string originalCurrentDirectory = Environment.CurrentDirectory;
+		string workingDirectory = Path.Combine(this.StagingDirectory, "cwd");
+		Directory.CreateDirectory(workingDirectory);
+
+		try
+		{
+			Environment.CurrentDirectory = workingDirectory;
+			this.Command = new()
+			{
+				InputPath = projectPath,
+				OutputPath = outputPath,
+				ExcludedProjectPaths = [Path.Combine("**", Path.GetFileName(referencedProjectPath))],
+			};
+
+			await this.ExecuteCommandAsync();
+		}
+		finally
+		{
+			Environment.CurrentDirectory = originalCurrentDirectory;
+		}
 
 		Assert.Equal(0, this.Command.ExitCode);
 		XDocument document = XDocument.Load(outputPath);
@@ -532,6 +612,17 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 			.Value;
 	}
 
+	private static string GetNodeIdByPath(XDocument document, string nodePath)
+	{
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		return document.Root!
+			.Element(ns + "Nodes")!
+			.Elements(ns + "Node")
+			.Single(node => (string?)node.Attribute("Path") == Path.GetFullPath(nodePath))
+			.Attribute("Id")!
+			.Value;
+	}
+
 	private static string CreateLibraryProjectContent() => """
 		<Project Sdk="Microsoft.NET.Sdk">
 		  <PropertyGroup>
@@ -569,10 +660,13 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 	}
 
 	private async Task<(string ProjectPath, string ReferencedProjectPath)> CreateProjectGraphAsync()
+		=> await this.CreateProjectGraphAsync(this.StagingDirectory);
+
+	private async Task<(string ProjectPath, string ReferencedProjectPath)> CreateProjectGraphAsync(string rootDirectory)
 	{
-		Directory.CreateDirectory(this.StagingDirectory);
-		string appDirectory = Path.Combine(this.StagingDirectory, "App");
-		string libDirectory = Path.Combine(this.StagingDirectory, "Lib");
+		Directory.CreateDirectory(rootDirectory);
+		string appDirectory = Path.Combine(rootDirectory, "App");
+		string libDirectory = Path.Combine(rootDirectory, "Lib");
 		Directory.CreateDirectory(appDirectory);
 		Directory.CreateDirectory(libDirectory);
 
