@@ -50,6 +50,12 @@ public class GraphCommand : MSBuildCommandBase
 	public string? OutputPath { get; init; }
 
 	/// <summary>
+	/// Gets the paths or path prefixes to project files that should be omitted from the DGML.
+	/// Relative paths are resolved against the current working directory.
+	/// </summary>
+	public string[]? ExcludedProjectPaths { get; init; }
+
+	/// <summary>
 	/// Creates the command.
 	/// </summary>
 	/// <returns>The command.</returns>
@@ -64,16 +70,23 @@ public class GraphCommand : MSBuildCommandBase
 			Arity = ArgumentArity.ZeroOrOne,
 			Description = "The DGML file to write. Defaults to the input path with a .dgml extension.",
 		};
+		Option<string[]> excludeOption = new("--exclude", "-e")
+		{
+			Description = "One or more project file paths or path prefixes to omit from the DGML. Relative paths are resolved against the current working directory.",
+			AllowMultipleArgumentsPerToken = true,
+		};
 
 		Command command = new("graph", "Builds an MSBuild project graph and writes it as DGML.")
 		{
 			inputArgument,
 			outputArgument,
+			excludeOption,
 		};
 		command.SetAction((parseResult, cancellationToken) => new GraphCommand(parseResult, cancellationToken)
 		{
 			InputPath = parseResult.GetValue(inputArgument)!,
 			OutputPath = parseResult.GetValue(outputArgument),
+			ExcludedProjectPaths = parseResult.GetValue(excludeOption),
 		}.ExecuteAndDisposeAsync());
 
 		return command;
@@ -101,12 +114,14 @@ public class GraphCommand : MSBuildCommandBase
 		string outputPath = this.OutputPath is not null
 			? Path.GetFullPath(this.OutputPath)
 			: Path.ChangeExtension(fullInputPath, ".dgml");
+		HashSet<string> excludedProjectPaths = NormalizeProjectPathsRelativeTo(Environment.CurrentDirectory, this.ExcludedProjectPaths);
 
 		try
 		{
-			GraphInput graphInput = await LoadGraphInputAsync(fullInputPath, this.CancellationToken);
-			ProjectGraph projectGraph = new(graphInput.EntryPoints);
-			GraphModel graphModel = BuildGraphModel(projectGraph, graphInput.ExplicitSolutionProjects);
+			GraphInput graphInput = await LoadGraphInputAsync(fullInputPath, excludedProjectPaths, this.CancellationToken);
+			GraphModel graphModel = graphInput.EntryPoints.Count > 0
+				? BuildGraphModel(new ProjectGraph(graphInput.EntryPoints), graphInput.ExplicitSolutionProjects, excludedProjectPaths)
+				: new GraphModel([], []);
 			XDocument dgml = CreateDgml(graphModel, fullInputPath, graphInput.InputKind);
 
 			Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
@@ -136,7 +151,7 @@ public class GraphCommand : MSBuildCommandBase
 		return string.Join(Environment.NewLine + "Caused by: ", messages);
 	}
 
-	private static async Task<GraphInput> LoadGraphInputAsync(string inputPath, CancellationToken cancellationToken)
+	private static async Task<GraphInput> LoadGraphInputAsync(string inputPath, IReadOnlySet<string> excludedProjectPaths, CancellationToken cancellationToken)
 	{
 		string extension = Path.GetExtension(inputPath);
 		if (!extension.Equals(".sln", StringComparison.OrdinalIgnoreCase)
@@ -144,7 +159,7 @@ public class GraphCommand : MSBuildCommandBase
 		{
 			return new GraphInput(
 			InputKind.Project,
-			[new ProjectGraphEntryPoint(inputPath)],
+			IsExcludedProjectPath(inputPath, excludedProjectPaths) ? [] : [new ProjectGraphEntryPoint(inputPath)],
 			new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 		}
 
@@ -157,6 +172,11 @@ public class GraphCommand : MSBuildCommandBase
 		foreach (SolutionProjectModel solutionProject in solutionModel.SolutionProjects)
 		{
 			string projectPath = NormalizeProjectPathRelativeTo(solutionDirectory, solutionProject.FilePath);
+			if (IsExcludedProjectPath(projectPath, excludedProjectPaths))
+			{
+				continue;
+			}
+
 			explicitProjects.Add(projectPath);
 			entryPoints.Add(new ProjectGraphEntryPoint(projectPath));
 		}
@@ -167,7 +187,7 @@ public class GraphCommand : MSBuildCommandBase
 			explicitProjects);
 	}
 
-	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects)
+	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlySet<string> excludedProjectPaths)
 	{
 		Dictionary<string, GraphNodeModel> nodesByPath = new(StringComparer.OrdinalIgnoreCase);
 		HashSet<(string SourcePath, string TargetPath)> edgeKeys = [];
@@ -176,11 +196,21 @@ public class GraphCommand : MSBuildCommandBase
 		foreach (ProjectGraphNode graphNode in projectGraph.ProjectNodes)
 		{
 			string sourcePath = NormalizeProjectPath(graphNode.ProjectInstance.FullPath);
+			if (IsExcludedProjectPath(sourcePath, excludedProjectPaths))
+			{
+				continue;
+			}
+
 			GetOrCreateNode(nodesByPath, sourcePath, explicitSolutionProjects.Contains(sourcePath));
 
 			foreach (ProjectGraphNode projectReference in graphNode.ProjectReferences)
 			{
 				string targetPath = NormalizeProjectPath(projectReference.ProjectInstance.FullPath);
+				if (IsExcludedProjectPath(targetPath, excludedProjectPaths))
+				{
+					continue;
+				}
+
 				GetOrCreateNode(nodesByPath, targetPath, explicitSolutionProjects.Contains(targetPath));
 
 				if (edgeKeys.Add((sourcePath, targetPath)))
@@ -254,7 +284,7 @@ public class GraphCommand : MSBuildCommandBase
 			new XAttribute("Category", "ProjectReference")));
 		}
 
-		if (inputKind == InputKind.Slnx)
+		if (inputKind == InputKind.Slnx && graphModel.Nodes.Any(node => node.IsExplicitSolutionProject))
 		{
 			const string containerId = "solution:explicit-projects";
 			nodesElement.Add(new XElement(
@@ -300,10 +330,49 @@ public class GraphCommand : MSBuildCommandBase
 				linksElement));
 	}
 
+	private static HashSet<string> NormalizeProjectPathsRelativeTo(string baseDirectory, IEnumerable<string>? paths)
+	{
+		HashSet<string> normalizedPaths = new(StringComparer.OrdinalIgnoreCase);
+		if (paths is null)
+		{
+			return normalizedPaths;
+		}
+
+		foreach (string path in paths)
+		{
+			normalizedPaths.Add(NormalizeProjectPathRelativeTo(baseDirectory, path));
+		}
+
+		return normalizedPaths;
+	}
+
+	private static bool IsExcludedProjectPath(string projectPath, IReadOnlySet<string> excludedProjectPaths)
+	{
+		foreach (string excludedProjectPath in excludedProjectPaths)
+		{
+			if (projectPath.Equals(excludedProjectPath, StringComparison.OrdinalIgnoreCase))
+			{
+				return true;
+			}
+
+			if (projectPath.Length > excludedProjectPath.Length
+				&& projectPath.StartsWith(excludedProjectPath, StringComparison.OrdinalIgnoreCase)
+				&& IsDirectorySeparator(projectPath[excludedProjectPath.Length]))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	private static string NormalizeProjectPathRelativeTo(string baseDirectory, string path)
 		=> NormalizeProjectPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory, path));
 
-	private static string NormalizeProjectPath(string path) => Path.GetFullPath(path);
+	private static string NormalizeProjectPath(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+
+	private static bool IsDirectorySeparator(char value)
+		=> value == Path.DirectorySeparatorChar || value == Path.AltDirectorySeparatorChar;
 
 	private sealed class GraphInput
 	{
