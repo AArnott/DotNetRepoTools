@@ -434,7 +434,11 @@ public class GraphCommand : MSBuildCommandBase
 
 	private static string CreateDeterministicNodeId(string prefix, string value)
 	{
-		byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+		string relativePath = Path.GetRelativePath(Environment.CurrentDirectory, value);
+		string normalizedRelativePath = relativePath
+			.Replace(Path.DirectorySeparatorChar, '/')
+			.Replace(Path.AltDirectorySeparatorChar, '/');
+		byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalizedRelativePath));
 		return $"{prefix}:{Convert.ToHexString(hash)}";
 	}
 
