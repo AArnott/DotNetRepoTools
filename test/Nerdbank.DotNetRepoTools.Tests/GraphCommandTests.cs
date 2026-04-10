@@ -360,6 +360,16 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 	}
 
 	[Fact]
+	public void CreateCommand_DefinesHighlightProjectsOptionAliasAndMultipleArguments()
+	{
+		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
+		Option highlightProjectsOption = Assert.Single(command.Options, option => option.Name == "--highlight-projects");
+		Assert.Contains("-s", highlightProjectsOption.Aliases);
+		Assert.True(highlightProjectsOption.AllowMultipleArgumentsPerToken);
+	}
+
+	[Fact]
 	public void AddEdge_DoesNotCreateSelfReferentialEdge()
 	{
 		MethodInfo addEdgeMethod = typeof(GraphCommand).GetMethod("AddEdge", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -371,6 +381,64 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 
 		Assert.Empty(edges.Cast<object>());
 		Assert.Empty(edgeKeys);
+	}
+
+	[Fact]
+	public async Task WritesDgmlForProjectInput_HighlightsProjectsUsingGlobPatternsAndStyles()
+	{
+		(string projectPath, _, string childGroupPath, string siblingProjectPath, string nestedProjectPath, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
+		string outputPath = Path.Combine(this.StagingDirectory, "graph-highlighted.dgml");
+		string originalCurrentDirectory = Environment.CurrentDirectory;
+		string workingDirectory = Path.Combine(this.StagingDirectory, "cwd");
+		Directory.CreateDirectory(workingDirectory);
+
+		try
+		{
+			Environment.CurrentDirectory = workingDirectory;
+			this.Command = new()
+			{
+				InputPath = projectPath,
+				OutputPath = outputPath,
+				HighlightProjectPatterns =
+				[
+					Path.Combine("..", "src", "Copilot", "App", "*.csproj"),
+					Path.Combine(Path.GetRelativePath(workingDirectory, childGroupPath), "*.csproj"),
+				],
+			};
+
+			await this.ExecuteCommandAsync();
+		}
+		finally
+		{
+			Environment.CurrentDirectory = originalCurrentDirectory;
+		}
+
+		Assert.Equal(0, this.Command.ExitCode);
+		XDocument document = XDocument.Load(outputPath);
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		XElement appNode = GetNodeByPath(document, projectPath);
+		XElement nestedNode = GetNodeByPath(document, nestedProjectPath);
+		XElement siblingNode = GetNodeByPath(document, siblingProjectPath);
+		XElement ungroupedNode = GetNodeByPath(document, ungroupedProjectPath);
+		XAttribute appCategoryAttribute = Assert.Single(appNode.Attributes("Category"));
+		XAttribute nestedCategoryAttribute = Assert.Single(nestedNode.Attributes("Category"));
+		string appCategoryId = appCategoryAttribute.Value;
+		string nestedCategoryId = nestedCategoryAttribute.Value;
+		Assert.NotEqual(appCategoryId, nestedCategoryId);
+		Assert.Null((string?)siblingNode.Attribute("Category"));
+		Assert.Null((string?)ungroupedNode.Attribute("Category"));
+
+		IReadOnlyList<XElement> categories = document.Root!.Element(ns + "Categories")!.Elements(ns + "Category").ToList();
+		Assert.Contains(categories, category => (string?)category.Attribute("Id") == appCategoryId);
+		Assert.Contains(categories, category => (string?)category.Attribute("Id") == nestedCategoryId);
+
+		IReadOnlyList<XElement> styles = document.Root.Element(ns + "Styles")!.Elements(ns + "Style").ToList();
+		Assert.Equal(2, styles.Count);
+		AssertProjectHighlightStyle(styles, appCategoryId);
+		AssertProjectHighlightStyle(styles, nestedCategoryId);
+		Assert.NotEqual(
+			GetStyleSetterValue(styles, appCategoryId, "Background"),
+			GetStyleSetterValue(styles, nestedCategoryId, "Background"));
 	}
 
 	private static string CreateSolutionFileContent(string solutionPath, string projectPath, string referencedProjectPath, bool reverseProjectOrder = false)
@@ -447,6 +515,34 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		  </PropertyGroup>
 		</Project>
 		""";
+
+	private static XElement GetNodeByPath(XDocument document, string nodePath)
+	{
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		return document.Root!
+			.Element(ns + "Nodes")!
+			.Elements(ns + "Node")
+			.Single(node => (string?)node.Attribute("Path") == Path.GetFullPath(nodePath));
+	}
+
+	private static void AssertProjectHighlightStyle(IReadOnlyList<XElement> styles, string categoryId)
+	{
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		XElement style = Assert.Single(styles, candidate => (string?)candidate.Element(ns + "Condition")?.Attribute("Expression") == $"HasCategory('{categoryId}')");
+		Assert.Equal("Node", (string?)style.Attribute("TargetType"));
+		Assert.Equal("Project Highlights", (string?)style.Attribute("GroupLabel"));
+		Assert.StartsWith("Project Highlight ", (string)style.Attribute("ValueLabel")!);
+		Assert.StartsWith("#", GetStyleSetterValue(styles, categoryId, "Background"));
+		Assert.StartsWith("#", GetStyleSetterValue(styles, categoryId, "Stroke"));
+		Assert.StartsWith("#", GetStyleSetterValue(styles, categoryId, "Foreground"));
+	}
+
+	private static string GetStyleSetterValue(IReadOnlyList<XElement> styles, string categoryId, string propertyName)
+	{
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		XElement style = Assert.Single(styles, candidate => (string?)candidate.Element(ns + "Condition")?.Attribute("Expression") == $"HasCategory('{categoryId}')");
+		return Assert.Single(style.Elements(ns + "Setter"), setter => (string?)setter.Attribute("Property") == propertyName).Attribute("Value")!.Value;
+	}
 
 	private async Task<(string ProjectPath, string ReferencedProjectPath)> CreateProjectGraphAsync()
 	{

@@ -3,6 +3,7 @@
 
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Microsoft.Build.Graph;
 using Microsoft.VisualStudio.SolutionPersistence;
@@ -18,7 +19,19 @@ public class GraphCommand : MSBuildCommandBase
 {
 	private const string ContainsCategory = "Contains";
 	private const string ProjectReferenceCategory = "ProjectReference";
+	private const string HighlightProjectCategoryPrefix = "HighlightProject";
 	private const string SlnxExplicitProjectsContainerId = "solution:explicit-projects";
+	private static readonly IReadOnlyList<GraphHighlightStyleModel> HighlightStyles =
+	[
+		new("#DBEAFE", "#2563EB", "#172554"),
+		new("#DCFCE7", "#16A34A", "#052E16"),
+		new("#FCE7F3", "#DB2777", "#500724"),
+		new("#FEF3C7", "#D97706", "#451A03"),
+		new("#EDE9FE", "#7C3AED", "#2E1065"),
+		new("#CCFBF1", "#0F766E", "#042F2E"),
+		new("#FEE2E2", "#DC2626", "#450A0A"),
+		new("#FFEDD5", "#EA580C", "#431407"),
+	];
 
 	/// <summary>
 	/// Initializes a new instance of the <see cref="GraphCommand"/> class.
@@ -66,6 +79,12 @@ public class GraphCommand : MSBuildCommandBase
 	public string[]? GroupPaths { get; init; }
 
 	/// <summary>
+	/// Gets the globbing patterns used to assign projects to highlight categories.
+	/// Relative patterns are resolved against the current working directory.
+	/// </summary>
+	public string[]? HighlightProjectPatterns { get; init; }
+
+	/// <summary>
 	/// Creates the command.
 	/// </summary>
 	/// <returns>The command.</returns>
@@ -90,6 +109,11 @@ public class GraphCommand : MSBuildCommandBase
 			Description = "One or more directory paths that should become DGML containers. Relative paths are resolved against the current working directory.",
 			AllowMultipleArgumentsPerToken = true,
 		};
+		Option<string[]> highlightProjectsOption = new("--highlight-projects", "-s")
+		{
+			Description = "One or more glob patterns matched against project paths. Each pattern assigns matching projects to a distinct highlighted DGML category. Relative patterns are resolved against the current working directory.",
+			AllowMultipleArgumentsPerToken = true,
+		};
 
 		Command command = new("graph", "Builds an MSBuild project graph and writes it as DGML.")
 		{
@@ -97,6 +121,7 @@ public class GraphCommand : MSBuildCommandBase
 			outputArgument,
 			excludeOption,
 			groupOption,
+			highlightProjectsOption,
 		};
 		command.SetAction((parseResult, cancellationToken) => new GraphCommand(parseResult, cancellationToken)
 		{
@@ -104,6 +129,7 @@ public class GraphCommand : MSBuildCommandBase
 			OutputPath = parseResult.GetValue(outputArgument),
 			ExcludedProjectPaths = parseResult.GetValue(excludeOption),
 			GroupPaths = parseResult.GetValue(groupOption),
+			HighlightProjectPatterns = parseResult.GetValue(highlightProjectsOption),
 		}.ExecuteAndDisposeAsync());
 
 		return command;
@@ -133,13 +159,14 @@ public class GraphCommand : MSBuildCommandBase
 			: Path.ChangeExtension(fullInputPath, ".dgml");
 		HashSet<string> excludedProjectPaths = NormalizePathsRelativeTo(Environment.CurrentDirectory, this.ExcludedProjectPaths);
 		HashSet<string> groupingPaths = NormalizePathsRelativeTo(Environment.CurrentDirectory, this.GroupPaths);
+		IReadOnlyList<ProjectHighlightRuleModel> highlightRules = CreateProjectHighlightRulesRelativeTo(Environment.CurrentDirectory, this.HighlightProjectPatterns);
 
 		try
 		{
 			GraphInput graphInput = await LoadGraphInputAsync(fullInputPath, excludedProjectPaths, this.CancellationToken);
 			GraphModel graphModel = graphInput.EntryPoints.Count > 0
-				? BuildGraphModel(new ProjectGraph(graphInput.EntryPoints), graphInput.ExplicitSolutionProjects, excludedProjectPaths, groupingPaths, fullInputPath, graphInput.InputKind)
-				: new GraphModel([], []);
+				? BuildGraphModel(new ProjectGraph(graphInput.EntryPoints), graphInput.ExplicitSolutionProjects, excludedProjectPaths, groupingPaths, highlightRules, fullInputPath, graphInput.InputKind)
+				: new GraphModel([], [], []);
 			XDocument dgml = CreateDgml(graphModel);
 
 			Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
@@ -205,7 +232,7 @@ public class GraphCommand : MSBuildCommandBase
 			explicitProjects);
 	}
 
-	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlySet<string> excludedProjectPaths, IReadOnlySet<string> groupingPaths, string inputPath, InputKind inputKind)
+	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlySet<string> excludedProjectPaths, IReadOnlySet<string> groupingPaths, IReadOnlyList<ProjectHighlightRuleModel> highlightRules, string inputPath, InputKind inputKind)
 	{
 		Dictionary<string, GraphNodeModel> projectNodesByPath = new(StringComparer.OrdinalIgnoreCase);
 		List<GraphNodeModel> containerNodes = [];
@@ -221,7 +248,7 @@ public class GraphCommand : MSBuildCommandBase
 				continue;
 			}
 
-			GetOrCreateProjectNode(projectNodesByPath, sourcePath, explicitSolutionProjects.Contains(sourcePath));
+			GetOrCreateProjectNode(projectNodesByPath, sourcePath, explicitSolutionProjects.Contains(sourcePath), FindHighlightCategoryId(sourcePath, highlightRules));
 
 			foreach (ProjectGraphNode projectReference in graphNode.ProjectReferences)
 			{
@@ -231,7 +258,7 @@ public class GraphCommand : MSBuildCommandBase
 					continue;
 				}
 
-				GetOrCreateProjectNode(projectNodesByPath, targetPath, explicitSolutionProjects.Contains(targetPath));
+				GetOrCreateProjectNode(projectNodesByPath, targetPath, explicitSolutionProjects.Contains(targetPath), FindHighlightCategoryId(targetPath, highlightRules));
 				AddEdge(projectNodesByPath[sourcePath].Id, projectNodesByPath[targetPath].Id, ProjectReferenceCategory, edges, edgeKeys);
 			}
 		}
@@ -257,7 +284,8 @@ public class GraphCommand : MSBuildCommandBase
 				.OrderBy(edge => edge.Category, StringComparer.Ordinal)
 				.ThenBy(edge => edge.SourceId, StringComparer.Ordinal)
 				.ThenBy(edge => edge.TargetId, StringComparer.Ordinal)
-				.ToList());
+				.ToList(),
+			highlightRules.Select(rule => rule.Category).ToList());
 	}
 
 	private static void AddGroupingContainers(
@@ -299,7 +327,7 @@ public class GraphCommand : MSBuildCommandBase
 		ICollection<GraphEdgeModel> edges,
 		ISet<(string SourceId, string TargetId, string Category)> edgeKeys)
 	{
-		GraphNodeModel containerNode = new(SlnxExplicitProjectsContainerId, path: null, Path.GetFileName(inputPath), isExplicitSolutionProject: false, isContainer: true);
+		GraphNodeModel containerNode = new(SlnxExplicitProjectsContainerId, path: null, Path.GetFileName(inputPath), isExplicitSolutionProject: false, isContainer: true, highlightCategoryId: null);
 		containerNodes.Add(containerNode);
 		foreach (GraphNodeModel node in explicitProjectNodes)
 		{
@@ -310,13 +338,19 @@ public class GraphCommand : MSBuildCommandBase
 	private static GraphNodeModel GetOrCreateProjectNode(
 		IDictionary<string, GraphNodeModel> nodesByPath,
 		string projectPath,
-		bool isExplicitSolutionProject)
+		bool isExplicitSolutionProject,
+		string? highlightCategoryId)
 	{
 		if (nodesByPath.TryGetValue(projectPath, out GraphNodeModel? existing))
 		{
 			if (isExplicitSolutionProject)
 			{
 				existing.IsExplicitSolutionProject = true;
+			}
+
+			if (highlightCategoryId is not null)
+			{
+				existing.HighlightCategoryId = highlightCategoryId;
 			}
 
 			return existing;
@@ -327,7 +361,8 @@ public class GraphCommand : MSBuildCommandBase
 			projectPath,
 			Path.GetFileName(projectPath),
 			isExplicitSolutionProject,
-			isContainer: false);
+			isContainer: false,
+			highlightCategoryId);
 		nodesByPath.Add(projectPath, created);
 		return created;
 	}
@@ -347,7 +382,8 @@ public class GraphCommand : MSBuildCommandBase
 			containerPath,
 			GetContainerLabel(containerPath),
 			isExplicitSolutionProject: false,
-			isContainer: true);
+			isContainer: true,
+			highlightCategoryId: null);
 		nodesByPath.Add(containerPath, created);
 		containerNodes.Add(created);
 		return created;
@@ -428,6 +464,11 @@ public class GraphCommand : MSBuildCommandBase
 				nodeElement.Add(new XAttribute("Group", "Expanded"));
 			}
 
+			if (node.HighlightCategoryId is not null)
+			{
+				nodeElement.Add(new XAttribute("Category", node.HighlightCategoryId));
+			}
+
 			nodesElement.Add(nodeElement);
 		}
 
@@ -441,32 +482,164 @@ public class GraphCommand : MSBuildCommandBase
 			new XAttribute("Category", edge.Category)));
 		}
 
+		List<object> directedGraphChildren =
+		[
+			new XElement(
+				ns + "Properties",
+				new XElement(
+					ns + "Property",
+					new XAttribute("Id", "Path"),
+					new XAttribute("Label", "Path"),
+					new XAttribute("DataType", "System.String"))),
+			new XElement(
+				ns + "Categories",
+				new XElement(
+					ns + "Category",
+					new XAttribute("Id", ContainsCategory),
+					new XAttribute("Label", "Contains"),
+					new XAttribute("IsContainment", "True")),
+				new XElement(
+					ns + "Category",
+					new XAttribute("Id", ProjectReferenceCategory),
+					new XAttribute("Label", "Project Reference")),
+				graphModel.HighlightCategories.Select(category =>
+					new XElement(
+						ns + "Category",
+						new XAttribute("Id", category.Id),
+						new XAttribute("Label", category.Label)))),
+		];
+		if (graphModel.HighlightCategories.Count > 0)
+		{
+			directedGraphChildren.Add(
+				new XElement(
+					ns + "Styles",
+					graphModel.HighlightCategories.Select(category =>
+						new XElement(
+							ns + "Style",
+							new XAttribute("TargetType", "Node"),
+							new XAttribute("GroupLabel", "Project Highlights"),
+							new XAttribute("ValueLabel", category.Label),
+							new XElement(
+								ns + "Condition",
+								new XAttribute("Expression", $"HasCategory('{category.Id}')")),
+							new XElement(
+								ns + "Setter",
+								new XAttribute("Property", "Background"),
+								new XAttribute("Value", category.Style.Background)),
+							new XElement(
+								ns + "Setter",
+								new XAttribute("Property", "Stroke"),
+								new XAttribute("Value", category.Style.Stroke)),
+							new XElement(
+								ns + "Setter",
+								new XAttribute("Property", "Foreground"),
+								new XAttribute("Value", category.Style.Foreground))))));
+		}
+
+		directedGraphChildren.Add(nodesElement);
+		directedGraphChildren.Add(linksElement);
+
 		return new XDocument(
 			new XDeclaration("1.0", "utf-8", "yes"),
 			new XElement(
 				ns + "DirectedGraph",
 				new XAttribute("GraphDirection", "LeftToRight"),
-				new XElement(
-					ns + "Properties",
-					new XElement(
-						ns + "Property",
-						new XAttribute("Id", "Path"),
-						new XAttribute("Label", "Path"),
-						new XAttribute("DataType", "System.String"))),
-				new XElement(
-					ns + "Categories",
-					new XElement(
-						ns + "Category",
-						new XAttribute("Id", ContainsCategory),
-						new XAttribute("Label", "Contains"),
-						new XAttribute("IsContainment", "True")),
-					new XElement(
-						ns + "Category",
-						new XAttribute("Id", ProjectReferenceCategory),
-						new XAttribute("Label", "Project Reference"))),
-				nodesElement,
-				linksElement));
+				directedGraphChildren));
 	}
+
+	private static IReadOnlyList<ProjectHighlightRuleModel> CreateProjectHighlightRulesRelativeTo(string baseDirectory, IEnumerable<string>? patterns)
+	{
+		if (patterns is null)
+		{
+			return [];
+		}
+
+		List<ProjectHighlightRuleModel> rules = [];
+		int index = 0;
+		foreach (string pattern in patterns)
+		{
+			GraphHighlightStyleModel style = HighlightStyles[index % HighlightStyles.Count];
+			GraphHighlightCategoryModel category = new(
+				$"{HighlightProjectCategoryPrefix}:{index + 1}",
+				$"Project Highlight {index + 1}",
+				style);
+			rules.Add(new ProjectHighlightRuleModel(CreateGlobRegex(NormalizeGlobPatternRelativeTo(baseDirectory, pattern)), category));
+			index++;
+		}
+
+		return rules;
+	}
+
+	private static string? FindHighlightCategoryId(string projectPath, IReadOnlyList<ProjectHighlightRuleModel> highlightRules)
+	{
+		string comparablePath = NormalizeGlobComparablePath(projectPath);
+		foreach (ProjectHighlightRuleModel rule in highlightRules)
+		{
+			if (rule.Pattern.IsMatch(comparablePath))
+			{
+				return rule.Category.Id;
+			}
+		}
+
+		return null;
+	}
+
+	private static Regex CreateGlobRegex(string pattern)
+	{
+		StringBuilder regexBuilder = new("^");
+		for (int i = 0; i < pattern.Length; i++)
+		{
+			char current = pattern[i];
+			if (current == '*')
+			{
+				bool isDoubleStar = i + 1 < pattern.Length && pattern[i + 1] == '*';
+				if (isDoubleStar)
+				{
+					bool isDoubleStarDirectory = i + 2 < pattern.Length && pattern[i + 2] == '/';
+					regexBuilder.Append(isDoubleStarDirectory ? "(?:.*/)?" : ".*");
+					i += isDoubleStarDirectory ? 2 : 1;
+				}
+				else
+				{
+					regexBuilder.Append("[^/]*");
+				}
+			}
+			else if (current == '?')
+			{
+				regexBuilder.Append("[^/]");
+			}
+			else
+			{
+				regexBuilder.Append(Regex.Escape(current.ToString()));
+			}
+		}
+
+		regexBuilder.Append('$');
+		return new Regex(regexBuilder.ToString(), RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+	}
+
+	private static string NormalizeGlobPatternRelativeTo(string baseDirectory, string pattern)
+	{
+		string rootedPattern = Path.IsPathRooted(pattern) ? pattern : Path.Combine(baseDirectory, pattern);
+		string normalizedSeparators = rootedPattern.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+		string root = Path.GetPathRoot(normalizedSeparators)!;
+		string[] segments = normalizedSeparators[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+		int firstWildcardSegment = Array.FindIndex(segments, segment => segment.Contains('*') || segment.Contains('?'));
+		if (firstWildcardSegment < 0)
+		{
+			return NormalizeGlobComparablePath(normalizedSeparators);
+		}
+
+		string fixedPrefix = firstWildcardSegment == 0
+			? root
+			: Path.Combine(root, Path.Combine(segments[..firstWildcardSegment]));
+		string normalizedPrefix = NormalizeGlobComparablePath(fixedPrefix);
+		string wildcardSuffix = string.Join('/', segments[firstWildcardSegment..].Select(segment => segment.Replace(Path.AltDirectorySeparatorChar, '/').Replace(Path.DirectorySeparatorChar, '/')));
+		return string.IsNullOrEmpty(wildcardSuffix) ? normalizedPrefix : $"{normalizedPrefix}/{wildcardSuffix}";
+	}
+
+	private static string NormalizeGlobComparablePath(string path)
+		=> NormalizePath(path).Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/');
 
 	private static HashSet<string> NormalizePathsRelativeTo(string baseDirectory, IEnumerable<string>? paths)
 	{
@@ -536,15 +709,18 @@ public class GraphCommand : MSBuildCommandBase
 
 	private sealed class GraphModel
 	{
-		public GraphModel(IReadOnlyList<GraphNodeModel> nodes, IReadOnlyList<GraphEdgeModel> edges)
+		public GraphModel(IReadOnlyList<GraphNodeModel> nodes, IReadOnlyList<GraphEdgeModel> edges, IReadOnlyList<GraphHighlightCategoryModel> highlightCategories)
 		{
 			this.Nodes = nodes;
 			this.Edges = edges;
+			this.HighlightCategories = highlightCategories;
 		}
 
 		public IReadOnlyList<GraphNodeModel> Nodes { get; }
 
 		public IReadOnlyList<GraphEdgeModel> Edges { get; }
+
+		public IReadOnlyList<GraphHighlightCategoryModel> HighlightCategories { get; }
 	}
 
 	private sealed class GraphEdgeModel
@@ -563,7 +739,7 @@ public class GraphCommand : MSBuildCommandBase
 		public string Category { get; }
 	}
 
-	private sealed class GraphNodeModel(string id, string? path, string label, bool isExplicitSolutionProject, bool isContainer)
+	private sealed class GraphNodeModel(string id, string? path, string label, bool isExplicitSolutionProject, bool isContainer, string? highlightCategoryId)
 	{
 		public string Id { get; } = id;
 
@@ -574,5 +750,32 @@ public class GraphCommand : MSBuildCommandBase
 		public bool IsContainer { get; } = isContainer;
 
 		public bool IsExplicitSolutionProject { get; set; } = isExplicitSolutionProject;
+
+		public string? HighlightCategoryId { get; set; } = highlightCategoryId;
+	}
+
+	private sealed class ProjectHighlightRuleModel(Regex pattern, GraphHighlightCategoryModel category)
+	{
+		public Regex Pattern { get; } = pattern;
+
+		public GraphHighlightCategoryModel Category { get; } = category;
+	}
+
+	private sealed class GraphHighlightCategoryModel(string id, string label, GraphHighlightStyleModel style)
+	{
+		public string Id { get; } = id;
+
+		public string Label { get; } = label;
+
+		public GraphHighlightStyleModel Style { get; } = style;
+	}
+
+	private sealed class GraphHighlightStyleModel(string background, string stroke, string foreground)
+	{
+		public string Background { get; } = background;
+
+		public string Stroke { get; } = stroke;
+
+		public string Foreground { get; } = foreground;
 	}
 }
