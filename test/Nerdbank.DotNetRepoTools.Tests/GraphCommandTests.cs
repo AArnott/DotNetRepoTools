@@ -270,6 +270,94 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.True(excludeOption.AllowMultipleArgumentsPerToken);
 	}
 
+	[Fact]
+	public async Task WritesDgmlForProjectInput_GroupsProjectsUsingAbsoluteAndWorkingDirectoryRelativePaths()
+	{
+		(string projectPath, string parentGroupPath, string childGroupPath, string siblingProjectPath, string nestedProjectPath, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
+		string outputPath = Path.Combine(this.StagingDirectory, "graph-grouped.dgml");
+		string originalCurrentDirectory = Environment.CurrentDirectory;
+		string workingDirectory = Path.Combine(this.StagingDirectory, "cwd");
+		Directory.CreateDirectory(workingDirectory);
+
+		try
+		{
+			Environment.CurrentDirectory = workingDirectory;
+			this.Command = new()
+			{
+				InputPath = projectPath,
+				OutputPath = outputPath,
+				GroupPaths = [parentGroupPath, Path.GetRelativePath(workingDirectory, childGroupPath)],
+			};
+
+			await this.ExecuteCommandAsync();
+		}
+		finally
+		{
+			Environment.CurrentDirectory = originalCurrentDirectory;
+		}
+
+		Assert.Equal(0, this.Command.ExitCode);
+		XDocument document = XDocument.Load(outputPath);
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		Assert.Equal(6, document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node").Count());
+		XElement parentContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(parentGroupPath));
+		Assert.Equal("Copilot", (string?)parentContainer.Attribute("Label"));
+		Assert.Equal("Expanded", (string?)parentContainer.Attribute("Group"));
+		XElement childContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(childGroupPath));
+		Assert.Equal("tests", (string?)childContainer.Attribute("Label"));
+		Assert.Equal("Expanded", (string?)childContainer.Attribute("Group"));
+
+		IReadOnlyList<XElement> containsLinks = document.Root.Element(ns + "Links")!.Elements(ns + "Link")
+			.Where(link => (string?)link.Attribute("Category") == "Contains")
+			.ToList();
+		Assert.Equal(4, containsLinks.Count);
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && (string?)link.Attribute("Target") == (string?)childContainer.Attribute("Id"));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(projectPath));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(siblingProjectPath));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)childContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(nestedProjectPath));
+		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(ungroupedProjectPath));
+	}
+
+	[Fact]
+	public async Task WritesGroupContainersInsteadOfSlnxExplicitProjectsContainerWhenGroupsSpecified()
+	{
+		(string projectPath, string parentGroupPath, _, _, _, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
+		string solutionPath = Path.Combine(this.StagingDirectory, "Repo.slnx");
+		await CreateSlnxFileAsync(solutionPath, projectPath, ungroupedProjectPath);
+		string outputPath = Path.Combine(this.StagingDirectory, "solution-grouped.dgml");
+		this.Command = new()
+		{
+			InputPath = solutionPath,
+			OutputPath = outputPath,
+			GroupPaths = [parentGroupPath],
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		XDocument document = XDocument.Load(outputPath);
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		Assert.DoesNotContain(document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Id") == "solution:explicit-projects");
+		XElement parentContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(parentGroupPath));
+
+		IReadOnlyList<XElement> containsLinks = document.Root.Element(ns + "Links")!.Elements(ns + "Link")
+			.Where(link => (string?)link.Attribute("Category") == "Contains")
+			.ToList();
+		Assert.Equal(3, containsLinks.Count);
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(projectPath));
+		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(ungroupedProjectPath));
+	}
+
+	[Fact]
+	public void CreateCommand_DefinesGroupOptionAliasAndMultipleArguments()
+	{
+		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
+		Option groupOption = Assert.Single(command.Options, option => option.Name == "--group");
+		Assert.Contains("-g", groupOption.Aliases);
+		Assert.True(groupOption.AllowMultipleArgumentsPerToken);
+	}
+
 	private static string CreateSolutionFileContent(string solutionPath, string projectPath, string referencedProjectPath, bool reverseProjectOrder = false)
 	{
 		string solutionDirectory = Path.GetDirectoryName(solutionPath)!;
@@ -299,17 +387,31 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 			""";
 	}
 
-	private static async Task CreateSlnxFileAsync(string solutionPath, string projectPath)
+	private static async Task CreateSlnxFileAsync(string solutionPath, params string[] projectPaths)
 	{
 		string solutionDirectory = Path.GetDirectoryName(solutionPath)!;
-		string projectPathFromSolution = Path.GetRelativePath(solutionDirectory, projectPath);
 		SolutionModel solutionModel = new();
 		solutionModel.AddBuildType("Debug");
 		solutionModel.AddPlatform("Any CPU");
-		SolutionProjectModel project = solutionModel.AddProject(projectPathFromSolution, projectTypeName: null, folder: null);
-		project.DisplayName = "App";
+		foreach (string projectPath in projectPaths)
+		{
+			string projectPathFromSolution = Path.GetRelativePath(solutionDirectory, projectPath);
+			SolutionProjectModel project = solutionModel.AddProject(projectPathFromSolution, projectTypeName: null, folder: null);
+			project.DisplayName = Path.GetFileNameWithoutExtension(projectPath);
+		}
 
 		await ((ISolutionSerializer)SolutionSerializers.SlnXml).SaveAsync(solutionPath, solutionModel, TestContext.Current.CancellationToken);
+	}
+
+	private static string? GetNodePathById(XDocument document, string nodeId)
+	{
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		return document.Root!
+			.Element(ns + "Nodes")!
+			.Elements(ns + "Node")
+			.Single(node => (string?)node.Attribute("Id") == nodeId)
+			.Attribute("Path")?
+			.Value;
 	}
 
 	private static string? GetNodeLabelById(XDocument document, string nodeId)
@@ -396,5 +498,45 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		await File.WriteAllTextAsync(projectPath, projectContent, TestContext.Current.CancellationToken);
 
 		return (projectPath, excludedProjectPath, includedProjectPath);
+	}
+
+	private async Task<(string ProjectPath, string ParentGroupPath, string ChildGroupPath, string SiblingProjectPath, string NestedProjectPath, string UngroupedProjectPath)> CreateProjectGraphWithGroupingPathsAsync()
+	{
+		Directory.CreateDirectory(this.StagingDirectory);
+		string parentGroupPath = Path.Combine(this.StagingDirectory, "src", "Copilot");
+		string appDirectory = Path.Combine(parentGroupPath, "App");
+		string siblingDirectory = Path.Combine(parentGroupPath, "Shared");
+		string childGroupPath = Path.Combine(parentGroupPath, "tests");
+		string ungroupedDirectory = Path.Combine(this.StagingDirectory, "src", "Other");
+		Directory.CreateDirectory(appDirectory);
+		Directory.CreateDirectory(siblingDirectory);
+		Directory.CreateDirectory(childGroupPath);
+		Directory.CreateDirectory(ungroupedDirectory);
+
+		string siblingProjectPath = Path.Combine(siblingDirectory, "Shared.csproj");
+		await File.WriteAllTextAsync(siblingProjectPath, CreateLibraryProjectContent(), TestContext.Current.CancellationToken);
+
+		string nestedProjectPath = Path.Combine(childGroupPath, "Tests.csproj");
+		await File.WriteAllTextAsync(nestedProjectPath, CreateLibraryProjectContent(), TestContext.Current.CancellationToken);
+
+		string ungroupedProjectPath = Path.Combine(ungroupedDirectory, "Other.csproj");
+		await File.WriteAllTextAsync(ungroupedProjectPath, CreateLibraryProjectContent(), TestContext.Current.CancellationToken);
+
+		string projectPath = Path.Combine(appDirectory, "App.csproj");
+		string projectContent = $$"""
+			<Project Sdk="Microsoft.NET.Sdk">
+			  <PropertyGroup>
+				<TargetFramework>net8.0</TargetFramework>
+			  </PropertyGroup>
+			  <ItemGroup>
+				<ProjectReference Include="{{Path.GetRelativePath(appDirectory, siblingProjectPath)}}" />
+				<ProjectReference Include="{{Path.GetRelativePath(appDirectory, nestedProjectPath)}}" />
+				<ProjectReference Include="{{Path.GetRelativePath(appDirectory, ungroupedProjectPath)}}" />
+			  </ItemGroup>
+			</Project>
+			""";
+		await File.WriteAllTextAsync(projectPath, projectContent, TestContext.Current.CancellationToken);
+
+		return (projectPath, parentGroupPath, childGroupPath, siblingProjectPath, nestedProjectPath, ungroupedProjectPath);
 	}
 }
