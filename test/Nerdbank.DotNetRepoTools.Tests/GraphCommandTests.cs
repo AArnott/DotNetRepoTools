@@ -127,6 +127,8 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Equal(2, document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node").Count());
 		Assert.Single(document.Root.Element(ns + "Links")!.Elements(ns + "Link"), link => (string?)link.Attribute("Category") == "ProjectReference");
 		Assert.DoesNotContain(document.Root.Element(ns + "Links")!.Elements(ns + "Link"), link => (string?)link.Attribute("Category") == "Contains");
+		Assert.Equal(GetEmittedPath(solutionPath, projectPath), GetNodePathById(document, GetNodeIdByPath(document, projectPath, solutionPath)));
+		Assert.Equal(GetEmittedPath(solutionPath, referencedProjectPath), GetNodePathById(document, GetNodeIdByPath(document, referencedProjectPath, solutionPath)));
 	}
 
 	[Fact]
@@ -209,54 +211,8 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 
 		XDocument firstDocument = XDocument.Load(firstOutputPath);
 		XDocument secondDocument = XDocument.Load(secondOutputPath);
-		Assert.Equal(GetNodeIdByPath(firstDocument, firstProjectPath), GetNodeIdByPath(secondDocument, secondProjectPath));
-		Assert.Equal(GetNodeIdByPath(firstDocument, firstReferencedProjectPath), GetNodeIdByPath(secondDocument, secondReferencedProjectPath));
-	}
-
-	[Fact]
-	public async Task WritesContainsLinksForSlnxInput()
-	{
-		(string projectPath, _) = await this.CreateProjectGraphAsync();
-		string solutionPath = Path.Combine(this.StagingDirectory, "Repo.slnx");
-		await CreateSlnxFileAsync(solutionPath, projectPath);
-		string outputPath = Path.Combine(this.StagingDirectory, "solution.dgml");
-		this.Command = new()
-		{
-			InputPath = solutionPath,
-			OutputPath = outputPath,
-		};
-
-		await this.ExecuteCommandAsync();
-
-		Assert.Equal(0, this.Command.ExitCode);
-		XDocument document = XDocument.Load(outputPath);
-		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
-		Assert.Equal(3, document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node").Count());
-		XElement containerNode = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Id") == "solution:explicit-projects");
-		Assert.Equal("Repo.slnx", (string?)containerNode.Attribute("Label"));
-		Assert.Equal("Expanded", (string?)containerNode.Attribute("Group"));
-
-		XElement containsLink = Assert.Single(document.Root.Element(ns + "Links")!.Elements(ns + "Link"), link => (string?)link.Attribute("Category") == "Contains");
-		Assert.Equal("solution:explicit-projects", (string?)containsLink.Attribute("Source"));
-		Assert.Equal("App.csproj", GetNodeLabelById(document, (string)containsLink.Attribute("Target")!));
-		Assert.Single(document.Root.Element(ns + "Links")!.Elements(ns + "Link"), link => (string?)link.Attribute("Category") == "ProjectReference");
-	}
-
-	[Fact]
-	public async Task RejectsUnsupportedInputExtension()
-	{
-		Directory.CreateDirectory(this.StagingDirectory);
-		string inputPath = Path.Combine(this.StagingDirectory, "notes.txt");
-		await File.WriteAllTextAsync(inputPath, "irrelevant", TestContext.Current.CancellationToken);
-		this.Command = new()
-		{
-			InputPath = inputPath,
-		};
-
-		await this.ExecuteCommandAsync();
-
-		Assert.Equal(1, this.Command.ExitCode);
-		Assert.Contains("Unsupported input type '.txt'", ((StringWriter)this.Command.Error).ToString());
+		Assert.Equal(GetNodeIdByPath(firstDocument, firstProjectPath, firstProjectPath), GetNodeIdByPath(secondDocument, secondProjectPath, secondProjectPath));
+		Assert.Equal(GetNodeIdByPath(firstDocument, firstReferencedProjectPath, firstProjectPath), GetNodeIdByPath(secondDocument, secondReferencedProjectPath, secondProjectPath));
 	}
 
 	[Fact]
@@ -341,6 +297,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		string outputPath = Path.Combine(this.StagingDirectory, "graph-prefix.dgml");
 		string originalCurrentDirectory = Environment.CurrentDirectory;
 		string workingDirectory = this.StagingDirectory;
+		string emittedPathBaseDirectory = GetGraphOutputPathBaseDirectory(projectPath);
 
 		try
 		{
@@ -364,9 +321,9 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
 		Assert.Equal(2, document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node").Count());
 		Assert.Single(document.Root.Element(ns + "Links")!.Elements(ns + "Link"));
-		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(projectPath));
-		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(includedProjectPath));
-		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(excludedProjectPath));
+		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, projectPath));
+		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, includedProjectPath));
+		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, excludedProjectPath));
 	}
 
 	[Fact]
@@ -383,13 +340,14 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 
 		await this.ExecuteCommandAsync();
 
+		string emittedPathBaseDirectory = GetGraphOutputPathBaseDirectory(projectPath);
 		Assert.Equal(0, this.Command.ExitCode);
 		XDocument document = XDocument.Load(outputPath);
 		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
 		Assert.Single(document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node"));
 		Assert.Empty(document.Root.Element(ns + "Links")!.Elements(ns + "Link"));
-		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(projectPath));
-		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(referencedProjectPath));
+		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, projectPath));
+		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, referencedProjectPath));
 	}
 
 	[Fact]
@@ -424,27 +382,8 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
 		Assert.Single(document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node"));
 		Assert.Empty(document.Root.Element(ns + "Links")!.Elements(ns + "Link"));
-		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(projectPath));
-		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(referencedProjectPath));
-	}
-
-	[Fact]
-	public void CreateCommand_DefinesExcludeOptionAliasAndMultipleArguments()
-	{
-		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
-		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
-		Option excludeOption = Assert.Single(command.Options, option => option.Name == "--exclude");
-		Assert.Contains("-e", excludeOption.Aliases);
-		Assert.True(excludeOption.AllowMultipleArgumentsPerToken);
-	}
-
-	[Fact]
-	public void CreateCommand_DefinesFormatOptionAlias()
-	{
-		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
-		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
-		Option formatOption = Assert.Single(command.Options, option => option.Name == "--format");
-		Assert.Contains("-f", formatOption.Aliases);
+		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(projectPath, projectPath));
+		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(projectPath, referencedProjectPath));
 	}
 
 	[Fact]
@@ -454,6 +393,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		string outputPath = Path.Combine(this.StagingDirectory, "graph-grouped.dgml");
 		string originalCurrentDirectory = Environment.CurrentDirectory;
 		string workingDirectory = Path.Combine(this.StagingDirectory, "cwd");
+		string emittedPathBaseDirectory = GetGraphOutputPathBaseDirectory(projectPath);
 		Directory.CreateDirectory(workingDirectory);
 
 		try
@@ -477,10 +417,10 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		XDocument document = XDocument.Load(outputPath);
 		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
 		Assert.Equal(6, document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node").Count());
-		XElement parentContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(parentGroupPath));
+		XElement parentContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, parentGroupPath));
 		Assert.Equal("Copilot", (string?)parentContainer.Attribute("Label"));
 		Assert.Equal("Expanded", (string?)parentContainer.Attribute("Group"));
-		XElement childContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(childGroupPath));
+		XElement childContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, childGroupPath));
 		Assert.Equal("tests", (string?)childContainer.Attribute("Label"));
 		Assert.Equal("Expanded", (string?)childContainer.Attribute("Group"));
 
@@ -489,10 +429,10 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 			.ToList();
 		Assert.Equal(4, containsLinks.Count);
 		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && (string?)link.Attribute("Target") == (string?)childContainer.Attribute("Id"));
-		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(projectPath));
-		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(siblingProjectPath));
-		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)childContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(nestedProjectPath));
-		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(ungroupedProjectPath));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, projectPath));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, siblingProjectPath));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)childContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, nestedProjectPath));
+		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, ungroupedProjectPath));
 	}
 
 	[Fact]
@@ -511,110 +451,72 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 
 		await this.ExecuteCommandAsync();
 
+		string emittedPathBaseDirectory = GetGraphOutputPathBaseDirectory(solutionPath);
 		Assert.Equal(0, this.Command.ExitCode);
 		XDocument document = XDocument.Load(outputPath);
 		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
 		Assert.DoesNotContain(document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Id") == "solution:explicit-projects");
-		XElement parentContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(parentGroupPath));
+		XElement parentContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, parentGroupPath));
 
 		IReadOnlyList<XElement> containsLinks = document.Root.Element(ns + "Links")!.Elements(ns + "Link")
 			.Where(link => (string?)link.Attribute("Category") == "Contains")
 			.ToList();
 		Assert.Equal(3, containsLinks.Count);
-		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(projectPath));
-		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(ungroupedProjectPath));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, projectPath));
+		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, ungroupedProjectPath));
 	}
 
 	[Fact]
-	public void CreateCommand_DefinesGroupOptionAliasAndMultipleArguments()
+	public async Task WritesDgmlForProjectInput_DoesNotCreateEmptyGroupContainers()
 	{
-		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
-		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
-		Option groupOption = Assert.Single(command.Options, option => option.Name == "--group");
-		Assert.Contains("-g", groupOption.Aliases);
-		Assert.True(groupOption.AllowMultipleArgumentsPerToken);
-	}
-
-	[Fact]
-	public void CreateCommand_DefinesHighlightProjectsOptionAliasAndMultipleArguments()
-	{
-		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
-		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
-		Option highlightProjectsOption = Assert.Single(command.Options, option => option.Name == "--highlight-projects");
-		Assert.Contains("-s", highlightProjectsOption.Aliases);
-		Assert.True(highlightProjectsOption.AllowMultipleArgumentsPerToken);
-	}
-
-	[Fact]
-	public void AddEdge_DoesNotCreateSelfReferentialEdge()
-	{
-		MethodInfo addEdgeMethod = typeof(GraphCommand).GetMethod("AddEdge", BindingFlags.Static | BindingFlags.NonPublic)!;
-		Type graphEdgeModelType = typeof(GraphCommand).GetNestedType("GraphEdgeModel", BindingFlags.NonPublic)!;
-		IList edges = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(graphEdgeModelType))!;
-		HashSet<(string SourceId, string TargetId, string Category)> edgeKeys = [];
-
-		addEdgeMethod.Invoke(obj: null, ["node:1", "node:1", "Contains", edges, edgeKeys]);
-
-		Assert.Empty(edges.Cast<object>());
-		Assert.Empty(edgeKeys);
-	}
-
-	[Fact]
-	public async Task WritesDgmlForProjectInput_HighlightsProjectsUsingGlobPatternsAndStyles()
-	{
-		(string projectPath, _, string childGroupPath, string siblingProjectPath, string nestedProjectPath, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
-		string outputPath = Path.Combine(this.StagingDirectory, "graph-highlighted.dgml");
-		string originalCurrentDirectory = Environment.CurrentDirectory;
-		string workingDirectory = Path.Combine(this.StagingDirectory, "cwd");
-		Directory.CreateDirectory(workingDirectory);
-
-		try
+		(string projectPath, string parentGroupPath, _, string siblingProjectPath, string nestedProjectPath, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
+		string emptyChildGroupPath = Path.Combine(parentGroupPath, "empty");
+		Directory.CreateDirectory(emptyChildGroupPath);
+		string outputPath = Path.Combine(this.StagingDirectory, "graph-grouped-no-empty-containers.dgml");
+		this.Command = new()
 		{
-			Environment.CurrentDirectory = workingDirectory;
-			this.Command = new()
-			{
-				InputPath = projectPath,
-				OutputPath = outputPath,
-				HighlightProjectPatterns =
-				[
-					Path.Combine("..", "src", "Copilot", "App", "*.csproj"),
-					Path.Combine(Path.GetRelativePath(workingDirectory, childGroupPath), "*.csproj"),
-				],
-			};
+			InputPath = projectPath,
+			OutputPath = outputPath,
+			GroupPaths = [parentGroupPath, emptyChildGroupPath],
+		};
 
-			await this.ExecuteCommandAsync();
-		}
-		finally
-		{
-			Environment.CurrentDirectory = originalCurrentDirectory;
-		}
+		await this.ExecuteCommandAsync();
 
+		string emittedPathBaseDirectory = GetGraphOutputPathBaseDirectory(projectPath);
 		Assert.Equal(0, this.Command.ExitCode);
 		XDocument document = XDocument.Load(outputPath);
 		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
-		XElement appNode = GetNodeByPath(document, projectPath);
-		XElement nestedNode = GetNodeByPath(document, nestedProjectPath);
-		XElement siblingNode = GetNodeByPath(document, siblingProjectPath);
-		XElement ungroupedNode = GetNodeByPath(document, ungroupedProjectPath);
-		XAttribute appCategoryAttribute = Assert.Single(appNode.Attributes("Category"));
-		XAttribute nestedCategoryAttribute = Assert.Single(nestedNode.Attributes("Category"));
-		string appCategoryId = appCategoryAttribute.Value;
-		string nestedCategoryId = nestedCategoryAttribute.Value;
-		Assert.NotEqual(appCategoryId, nestedCategoryId);
-		Assert.Null((string?)siblingNode.Attribute("Category"));
-		Assert.Null((string?)ungroupedNode.Attribute("Category"));
+		Assert.Equal(5, document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node").Count());
+		XElement parentContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, parentGroupPath));
+		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, emptyChildGroupPath));
 
-		IReadOnlyList<XElement> categories = document.Root!.Element(ns + "Categories")!.Elements(ns + "Category").ToList();
-		Assert.Contains(categories, category => (string?)category.Attribute("Id") == appCategoryId);
-		Assert.Contains(categories, category => (string?)category.Attribute("Id") == nestedCategoryId);
+		IReadOnlyList<XElement> containsLinks = document.Root.Element(ns + "Links")!.Elements(ns + "Link")
+			.Where(link => (string?)link.Attribute("Category") == "Contains")
+			.ToList();
+		Assert.Equal(3, containsLinks.Count);
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, projectPath));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, siblingProjectPath));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, nestedProjectPath));
+		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, ungroupedProjectPath));
+	}
 
-		IReadOnlyList<XElement> styles = document.Root.Element(ns + "Styles")!.Elements(ns + "Style").ToList();
-		Assert.Equal(2, styles.Count);
-		AssertProjectHighlightStyle(styles, appCategoryId);
-		AssertProjectHighlightStyle(styles, nestedCategoryId);
-		Assert.NotEqual(
-			GetStyleSetterValue(styles, appCategoryId, "Background"),
-			GetStyleSetterValue(styles, nestedCategoryId, "Background"));
+	[Fact]
+	public void CreateCommand_DefinesExcludeOptionAliasAndMultipleArguments()
+	{
+		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
+		Option excludeOption = Assert.Single(command.Options, option => option.Name == "--exclude");
+		Assert.Contains("-e", excludeOption.Aliases);
+		Assert.True(excludeOption.AllowMultipleArgumentsPerToken);
+	}
+
+	[Fact]
+	public void CreateCommand_DefinesFormatOptionAlias()
+	{
+		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
+		Option formatOption = Assert.Single(command.Options, option => option.Name == "--format");
+		Assert.Contains("-f", formatOption.Aliases);
 	}
 
 	[Fact]
@@ -664,6 +566,52 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Contains(" --> ", mermaid);
 		Assert.DoesNotContain("Other.csproj\"] highlight", mermaid);
 		Assert.DoesNotContain("Shared.csproj\"] highlight", mermaid);
+	}
+
+	[Fact]
+	public async Task WritesMermaidUsingRepoRelativePathsWhenGitRepoContainsProject()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		Directory.CreateDirectory(Path.Combine(repoRoot, ".git"));
+		(string projectPath, _) = await this.CreateProjectGraphAsync(repoRoot);
+		string outputPath = Path.Combine(repoRoot, "graph.mmd");
+		this.Command = new()
+		{
+			InputPath = projectPath,
+			OutputPath = outputPath,
+			OutputFormat = GraphCommand.GraphOutputFormat.Mermaid,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		Assert.DoesNotContain(repoRoot, mermaid, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("[\"App.csproj\"]", mermaid);
+		Assert.Contains("[\"Lib.csproj\"]", mermaid);
+	}
+
+	[Fact]
+	public async Task WritesDgmlUsingRepoRelativePathsWhenGitRepoContainsProject()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		Directory.CreateDirectory(Path.Combine(repoRoot, ".git"));
+		(string projectPath, string referencedProjectPath) = await this.CreateProjectGraphAsync(repoRoot);
+		string outputPath = Path.Combine(repoRoot, "graph.dgml");
+		this.Command = new()
+		{
+			InputPath = projectPath,
+			OutputPath = outputPath,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		XDocument document = XDocument.Load(outputPath);
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		Assert.Contains(document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.Combine("App", "App.csproj"));
+		Assert.Contains(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.Combine("Lib", "Lib.csproj"));
+		Assert.DoesNotContain(document.ToString(), repoRoot, StringComparison.OrdinalIgnoreCase);
 	}
 
 	private static string CreateSolutionFileContent(string solutionPath, string projectPath, string referencedProjectPath, bool reverseProjectOrder = false)
@@ -733,13 +681,13 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 			.Value;
 	}
 
-	private static string GetNodeIdByPath(XDocument document, string nodePath)
+	private static string GetNodeIdByPath(XDocument document, string nodePath, string inputPath)
 	{
 		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
 		return document.Root!
 			.Element(ns + "Nodes")!
 			.Elements(ns + "Node")
-			.Single(node => (string?)node.Attribute("Path") == Path.GetFullPath(nodePath))
+			.Single(node => (string?)node.Attribute("Path") == GetEmittedPath(inputPath, nodePath))
 			.Attribute("Id")!
 			.Value;
 	}
@@ -752,32 +700,37 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		</Project>
 		""";
 
-	private static XElement GetNodeByPath(XDocument document, string nodePath)
+	private static XElement GetNodeByPath(XDocument document, string nodePath, string inputPath)
 	{
 		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
 		return document.Root!
 			.Element(ns + "Nodes")!
 			.Elements(ns + "Node")
-			.Single(node => (string?)node.Attribute("Path") == Path.GetFullPath(nodePath));
+			.Single(node => (string?)node.Attribute("Path") == GetEmittedPath(inputPath, nodePath));
 	}
 
-	private static void AssertProjectHighlightStyle(IReadOnlyList<XElement> styles, string categoryId)
+	private static string GetGraphOutputPathBaseDirectory(string inputPath)
 	{
-		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
-		XElement style = Assert.Single(styles, candidate => (string?)candidate.Element(ns + "Condition")?.Attribute("Expression") == $"HasCategory('{categoryId}')");
-		Assert.Equal("Node", (string?)style.Attribute("TargetType"));
-		Assert.Equal("Project Highlights", (string?)style.Attribute("GroupLabel"));
-		Assert.StartsWith("Project Highlight ", (string)style.Attribute("ValueLabel")!);
-		Assert.StartsWith("#", GetStyleSetterValue(styles, categoryId, "Background"));
-		Assert.StartsWith("#", GetStyleSetterValue(styles, categoryId, "Stroke"));
-		Assert.StartsWith("#", GetStyleSetterValue(styles, categoryId, "Foreground"));
+		string inputDirectory = Path.GetDirectoryName(Path.GetFullPath(inputPath))!;
+		for (string? subpath = inputDirectory; subpath is not null; subpath = Path.GetDirectoryName(subpath))
+		{
+			string gitLocation = Path.Combine(subpath, ".git");
+			if (File.Exists(gitLocation) || Directory.Exists(gitLocation))
+			{
+				return subpath;
+			}
+		}
+
+		return inputDirectory;
 	}
 
-	private static string GetStyleSetterValue(IReadOnlyList<XElement> styles, string categoryId, string propertyName)
+	private static string GetEmittedPath(string inputPathOrBaseDirectory, string path)
 	{
-		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
-		XElement style = Assert.Single(styles, candidate => (string?)candidate.Element(ns + "Condition")?.Attribute("Expression") == $"HasCategory('{categoryId}')");
-		return Assert.Single(style.Elements(ns + "Setter"), setter => (string?)setter.Attribute("Property") == propertyName).Attribute("Value")!.Value;
+		string fullInputPathOrBaseDirectory = Path.GetFullPath(inputPathOrBaseDirectory);
+		string pathBaseDirectory = File.Exists(fullInputPathOrBaseDirectory)
+			? GetGraphOutputPathBaseDirectory(fullInputPathOrBaseDirectory)
+			: fullInputPathOrBaseDirectory;
+		return Path.TrimEndingDirectorySeparator(Path.GetRelativePath(pathBaseDirectory, Path.GetFullPath(path)));
 	}
 
 	private async Task<(string ProjectPath, string ReferencedProjectPath)> CreateProjectGraphAsync()

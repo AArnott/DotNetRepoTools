@@ -191,6 +191,7 @@ public class GraphCommand : MSBuildCommandBase
 		string outputPath = this.OutputPath is not null
 			? Path.GetFullPath(this.OutputPath)
 			: Path.ChangeExtension(fullInputPath, GetDefaultFileExtension(outputFormat));
+		string emittedPathBaseDirectory = ResolveEmittedPathBaseDirectory(fullInputPath);
 		HashSet<string> groupingPaths = NormalizePathsRelativeTo(Environment.CurrentDirectory, this.GroupPaths);
 		IReadOnlyList<Regex> excludedProjectPathPatterns = CreatePathGlobPatternsRelativeTo(Environment.CurrentDirectory, this.ExcludedProjectPaths);
 		IReadOnlyList<ProjectHighlightRuleModel> highlightRules = CreateProjectHighlightRulesRelativeTo(Environment.CurrentDirectory, this.HighlightProjectPatterns);
@@ -199,7 +200,7 @@ public class GraphCommand : MSBuildCommandBase
 		{
 			GraphInput graphInput = await LoadGraphInputAsync(fullInputPath, excludedProjectPathPatterns, this.CancellationToken);
 			GraphModel graphModel = graphInput.EntryPoints.Count > 0
-				? BuildGraphModel(new ProjectGraph(graphInput.EntryPoints), graphInput.ExplicitSolutionProjects, excludedProjectPathPatterns, groupingPaths, highlightRules, fullInputPath, graphInput.InputKind)
+				? BuildGraphModel(new ProjectGraph(graphInput.EntryPoints), graphInput.ExplicitSolutionProjects, excludedProjectPathPatterns, groupingPaths, highlightRules, fullInputPath, graphInput.InputKind, emittedPathBaseDirectory)
 				: new GraphModel([], [], []);
 
 			Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
@@ -265,7 +266,7 @@ public class GraphCommand : MSBuildCommandBase
 			explicitProjects);
 	}
 
-	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlyList<Regex> excludedProjectPathPatterns, IReadOnlySet<string> groupingPaths, IReadOnlyList<ProjectHighlightRuleModel> highlightRules, string inputPath, InputKind inputKind)
+	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlyList<Regex> excludedProjectPathPatterns, IReadOnlySet<string> groupingPaths, IReadOnlyList<ProjectHighlightRuleModel> highlightRules, string inputPath, InputKind inputKind, string emittedPathBaseDirectory)
 	{
 		Dictionary<string, GraphNodeModel> projectNodesByPath = new(StringComparer.OrdinalIgnoreCase);
 		List<GraphNodeModel> containerNodes = [];
@@ -281,7 +282,7 @@ public class GraphCommand : MSBuildCommandBase
 				continue;
 			}
 
-			GetOrCreateProjectNode(projectNodesByPath, sourcePath, explicitSolutionProjects.Contains(sourcePath), FindHighlightCategoryId(sourcePath, highlightRules));
+			GetOrCreateProjectNode(projectNodesByPath, sourcePath, explicitSolutionProjects.Contains(sourcePath), FindHighlightCategoryId(sourcePath, highlightRules), emittedPathBaseDirectory);
 
 			foreach (ProjectGraphNode projectReference in graphNode.ProjectReferences)
 			{
@@ -291,14 +292,14 @@ public class GraphCommand : MSBuildCommandBase
 					continue;
 				}
 
-				GetOrCreateProjectNode(projectNodesByPath, targetPath, explicitSolutionProjects.Contains(targetPath), FindHighlightCategoryId(targetPath, highlightRules));
+				GetOrCreateProjectNode(projectNodesByPath, targetPath, explicitSolutionProjects.Contains(targetPath), FindHighlightCategoryId(targetPath, highlightRules), emittedPathBaseDirectory);
 				AddEdge(projectNodesByPath[sourcePath].Id, projectNodesByPath[targetPath].Id, ProjectReferenceCategory, edges, edgeKeys);
 			}
 		}
 
 		if (groupingPaths.Count > 0)
 		{
-			AddGroupingContainers(groupingPaths, projectNodesByPath.Values, groupingContainerNodesByPath, containerNodes, edges, edgeKeys);
+			AddGroupingContainers(groupingPaths, projectNodesByPath.Values, groupingContainerNodesByPath, containerNodes, edges, edgeKeys, emittedPathBaseDirectory);
 		}
 		else if (inputKind == InputKind.Slnx && projectNodesByPath.Values.Any(node => node.IsExplicitSolutionProject))
 		{
@@ -327,16 +328,35 @@ public class GraphCommand : MSBuildCommandBase
 		IDictionary<string, GraphNodeModel> groupingContainerNodesByPath,
 		ICollection<GraphNodeModel> containerNodes,
 		ICollection<GraphEdgeModel> edges,
-		ISet<(string SourceId, string TargetId, string Category)> edgeKeys)
+		ISet<(string SourceId, string TargetId, string Category)> edgeKeys,
+		string emittedPathBaseDirectory)
 	{
-		foreach (string groupingPath in groupingPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+		HashSet<string> nonEmptyGroupingPaths = new(StringComparer.OrdinalIgnoreCase);
+		Dictionary<string, string> projectGroupingPathByProjectId = new(StringComparer.Ordinal);
+
+		foreach (GraphNodeModel projectNode in projectNodes)
 		{
-			GetOrCreateContainerNode(groupingContainerNodesByPath, containerNodes, groupingPath);
+			string? groupingPath = FindContainingPath(projectNode.Path!, groupingPaths, allowExactMatch: true);
+			if (groupingPath is null)
+			{
+				continue;
+			}
+
+			projectGroupingPathByProjectId.Add(projectNode.Id, groupingPath);
+			for (string? currentGroupingPath = groupingPath; currentGroupingPath is not null; currentGroupingPath = FindContainingPath(currentGroupingPath, groupingPaths, allowExactMatch: false))
+			{
+				nonEmptyGroupingPaths.Add(currentGroupingPath);
+			}
 		}
 
-		foreach (string groupingPath in groupingPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+		foreach (string groupingPath in nonEmptyGroupingPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
 		{
-			string? parentGroupingPath = FindContainingPath(groupingPath, groupingPaths, allowExactMatch: false);
+			GetOrCreateContainerNode(groupingContainerNodesByPath, containerNodes, groupingPath, emittedPathBaseDirectory);
+		}
+
+		foreach (string groupingPath in nonEmptyGroupingPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+		{
+			string? parentGroupingPath = FindContainingPath(groupingPath, nonEmptyGroupingPaths, allowExactMatch: false);
 			if (parentGroupingPath is not null)
 			{
 				AddEdge(groupingContainerNodesByPath[parentGroupingPath].Id, groupingContainerNodesByPath[groupingPath].Id, ContainsCategory, edges, edgeKeys);
@@ -345,8 +365,7 @@ public class GraphCommand : MSBuildCommandBase
 
 		foreach (GraphNodeModel projectNode in projectNodes)
 		{
-			string? groupingPath = FindContainingPath(projectNode.Path!, groupingPaths, allowExactMatch: true);
-			if (groupingPath is not null)
+			if (projectGroupingPathByProjectId.TryGetValue(projectNode.Id, out string? groupingPath))
 			{
 				AddEdge(groupingContainerNodesByPath[groupingPath].Id, projectNode.Id, ContainsCategory, edges, edgeKeys);
 			}
@@ -360,7 +379,7 @@ public class GraphCommand : MSBuildCommandBase
 		ICollection<GraphEdgeModel> edges,
 		ISet<(string SourceId, string TargetId, string Category)> edgeKeys)
 	{
-		GraphNodeModel containerNode = new(SlnxExplicitProjectsContainerId, path: null, Path.GetFileName(inputPath), isExplicitSolutionProject: false, isContainer: true, highlightCategoryId: null);
+		GraphNodeModel containerNode = new(SlnxExplicitProjectsContainerId, path: null, emittedPath: null, Path.GetFileName(inputPath), isExplicitSolutionProject: false, isContainer: true, highlightCategoryId: null);
 		containerNodes.Add(containerNode);
 		foreach (GraphNodeModel node in explicitProjectNodes)
 		{
@@ -372,7 +391,8 @@ public class GraphCommand : MSBuildCommandBase
 		IDictionary<string, GraphNodeModel> nodesByPath,
 		string projectPath,
 		bool isExplicitSolutionProject,
-		string? highlightCategoryId)
+		string? highlightCategoryId,
+		string emittedPathBaseDirectory)
 	{
 		if (nodesByPath.TryGetValue(projectPath, out GraphNodeModel? existing))
 		{
@@ -390,8 +410,9 @@ public class GraphCommand : MSBuildCommandBase
 		}
 
 		GraphNodeModel created = new(
-			CreateDeterministicProjectNodeId(projectPath),
+			CreateDeterministicProjectNodeId(projectPath, emittedPathBaseDirectory),
 			projectPath,
+			GetPathRelativeTo(emittedPathBaseDirectory, projectPath),
 			Path.GetFileName(projectPath),
 			isExplicitSolutionProject,
 			isContainer: false,
@@ -403,7 +424,8 @@ public class GraphCommand : MSBuildCommandBase
 	private static GraphNodeModel GetOrCreateContainerNode(
 		IDictionary<string, GraphNodeModel> nodesByPath,
 		ICollection<GraphNodeModel> containerNodes,
-		string containerPath)
+		string containerPath,
+		string emittedPathBaseDirectory)
 	{
 		if (nodesByPath.TryGetValue(containerPath, out GraphNodeModel? existing))
 		{
@@ -411,8 +433,9 @@ public class GraphCommand : MSBuildCommandBase
 		}
 
 		GraphNodeModel created = new(
-			CreateDeterministicContainerNodeId(containerPath),
+			CreateDeterministicContainerNodeId(containerPath, emittedPathBaseDirectory),
 			containerPath,
+			GetPathRelativeTo(emittedPathBaseDirectory, containerPath),
 			GetContainerLabel(containerPath),
 			isExplicitSolutionProject: false,
 			isContainer: true,
@@ -459,15 +482,15 @@ public class GraphCommand : MSBuildCommandBase
 		return bestMatch;
 	}
 
-	private static string CreateDeterministicProjectNodeId(string projectPath)
-		=> CreateDeterministicNodeId("project", projectPath);
+	private static string CreateDeterministicProjectNodeId(string projectPath, string pathBaseDirectory)
+		=> CreateDeterministicNodeId("project", projectPath, pathBaseDirectory);
 
-	private static string CreateDeterministicContainerNodeId(string containerPath)
-		=> CreateDeterministicNodeId("container", containerPath);
+	private static string CreateDeterministicContainerNodeId(string containerPath, string pathBaseDirectory)
+		=> CreateDeterministicNodeId("container", containerPath, pathBaseDirectory);
 
-	private static string CreateDeterministicNodeId(string prefix, string value)
+	private static string CreateDeterministicNodeId(string prefix, string value, string pathBaseDirectory)
 	{
-		string relativePath = Path.GetRelativePath(Environment.CurrentDirectory, value);
+		string relativePath = GetPathRelativeTo(pathBaseDirectory, value);
 		string normalizedRelativePath = relativePath
 			.Replace(Path.DirectorySeparatorChar, '/')
 			.Replace(Path.AltDirectorySeparatorChar, '/');
@@ -546,9 +569,9 @@ public class GraphCommand : MSBuildCommandBase
 				ns + "Node",
 				new XAttribute("Id", node.Id),
 				new XAttribute("Label", node.Label));
-			if (node.Path is not null)
+			if (node.EmittedPath is not null)
 			{
-				nodeElement.Add(new XAttribute("Path", node.Path));
+				nodeElement.Add(new XAttribute("Path", node.EmittedPath));
 			}
 
 			if (node.IsContainer)
@@ -953,6 +976,15 @@ public class GraphCommand : MSBuildCommandBase
 	private static bool IsDirectorySeparator(char value)
 		=> value == Path.DirectorySeparatorChar || value == Path.AltDirectorySeparatorChar;
 
+	private static string ResolveEmittedPathBaseDirectory(string inputPath)
+	{
+		string inputDirectory = Path.GetDirectoryName(inputPath)!;
+		return FindGitRepoRoot(inputDirectory) ?? inputDirectory;
+	}
+
+	private static string GetPathRelativeTo(string baseDirectory, string path)
+		=> Path.TrimEndingDirectorySeparator(Path.GetRelativePath(baseDirectory, path));
+
 	private sealed class GraphInput
 	{
 		public GraphInput(InputKind inputKind, IReadOnlyList<ProjectGraphEntryPoint> entryPoints, HashSet<string> explicitSolutionProjects)
@@ -1001,11 +1033,13 @@ public class GraphCommand : MSBuildCommandBase
 		public string Category { get; }
 	}
 
-	private sealed class GraphNodeModel(string id, string? path, string label, bool isExplicitSolutionProject, bool isContainer, string? highlightCategoryId)
+	private sealed class GraphNodeModel(string id, string? path, string? emittedPath, string label, bool isExplicitSolutionProject, bool isContainer, string? highlightCategoryId)
 	{
 		public string Id { get; } = id;
 
 		public string? Path { get; } = path;
+
+		public string? EmittedPath { get; } = emittedPath;
 
 		public string Label { get; } = label;
 
