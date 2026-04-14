@@ -329,14 +329,32 @@ public class GraphCommand : MSBuildCommandBase
 		ICollection<GraphEdgeModel> edges,
 		ISet<(string SourceId, string TargetId, string Category)> edgeKeys)
 	{
-		foreach (string groupingPath in groupingPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+		HashSet<string> nonEmptyGroupingPaths = new(StringComparer.OrdinalIgnoreCase);
+		Dictionary<string, string> projectGroupingPathByProjectId = new(StringComparer.Ordinal);
+
+		foreach (GraphNodeModel projectNode in projectNodes)
+		{
+			string? groupingPath = FindContainingPath(projectNode.Path!, groupingPaths, allowExactMatch: true);
+			if (groupingPath is null)
+			{
+				continue;
+			}
+
+			projectGroupingPathByProjectId.Add(projectNode.Id, groupingPath);
+			for (string? currentGroupingPath = groupingPath; currentGroupingPath is not null; currentGroupingPath = FindContainingPath(currentGroupingPath, groupingPaths, allowExactMatch: false))
+			{
+				nonEmptyGroupingPaths.Add(currentGroupingPath);
+			}
+		}
+
+		foreach (string groupingPath in nonEmptyGroupingPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
 		{
 			GetOrCreateContainerNode(groupingContainerNodesByPath, containerNodes, groupingPath);
 		}
 
-		foreach (string groupingPath in groupingPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+		foreach (string groupingPath in nonEmptyGroupingPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
 		{
-			string? parentGroupingPath = FindContainingPath(groupingPath, groupingPaths, allowExactMatch: false);
+			string? parentGroupingPath = FindContainingPath(groupingPath, nonEmptyGroupingPaths, allowExactMatch: false);
 			if (parentGroupingPath is not null)
 			{
 				AddEdge(groupingContainerNodesByPath[parentGroupingPath].Id, groupingContainerNodesByPath[groupingPath].Id, ContainsCategory, edges, edgeKeys);
@@ -345,8 +363,7 @@ public class GraphCommand : MSBuildCommandBase
 
 		foreach (GraphNodeModel projectNode in projectNodes)
 		{
-			string? groupingPath = FindContainingPath(projectNode.Path!, groupingPaths, allowExactMatch: true);
-			if (groupingPath is not null)
+			if (projectGroupingPathByProjectId.TryGetValue(projectNode.Id, out string? groupingPath))
 			{
 				AddEdge(groupingContainerNodesByPath[groupingPath].Id, projectNode.Id, ContainsCategory, edges, edgeKeys);
 			}

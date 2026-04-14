@@ -526,6 +526,39 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 	}
 
 	[Fact]
+	public async Task WritesDgmlForProjectInput_DoesNotCreateEmptyGroupContainers()
+	{
+		(string projectPath, string parentGroupPath, _, string siblingProjectPath, string nestedProjectPath, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
+		string emptyChildGroupPath = Path.Combine(parentGroupPath, "empty");
+		Directory.CreateDirectory(emptyChildGroupPath);
+		string outputPath = Path.Combine(this.StagingDirectory, "graph-grouped-no-empty-containers.dgml");
+		this.Command = new()
+		{
+			InputPath = projectPath,
+			OutputPath = outputPath,
+			GroupPaths = [parentGroupPath, emptyChildGroupPath],
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		XDocument document = XDocument.Load(outputPath);
+		XNamespace ns = "http://schemas.microsoft.com/vs/2009/dgml";
+		Assert.Equal(5, document.Root!.Element(ns + "Nodes")!.Elements(ns + "Node").Count());
+		XElement parentContainer = Assert.Single(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(parentGroupPath));
+		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == Path.GetFullPath(emptyChildGroupPath));
+
+		IReadOnlyList<XElement> containsLinks = document.Root.Element(ns + "Links")!.Elements(ns + "Link")
+			.Where(link => (string?)link.Attribute("Category") == "Contains")
+			.ToList();
+		Assert.Equal(3, containsLinks.Count);
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(projectPath));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(siblingProjectPath));
+		Assert.Contains(containsLinks, link => (string?)link.Attribute("Source") == (string?)parentContainer.Attribute("Id") && GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(nestedProjectPath));
+		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == Path.GetFullPath(ungroupedProjectPath));
+	}
+
+	[Fact]
 	public void CreateCommand_DefinesGroupOptionAliasAndMultipleArguments()
 	{
 		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
