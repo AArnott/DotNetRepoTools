@@ -80,6 +80,7 @@ internal class NuGetHelper
 	internal async Task<RestoreTargetGraph> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, List<NuGetFramework> targetFrameworks, CancellationToken cancellationToken)
 	{
 		PackageSpec packageSpec = GetPackageSpec(this.Project.FullPath, this.NuGetSettings, packages, targetFrameworks) ?? throw new InvalidOperationException("Unable to generate a package spec for this project.");
+		packageSpec.RestoreMetadata.PackagesPath = SettingsUtility.GetGlobalPackagesFolder(this.NuGetSettings);
 
 		packageSpec.RestoreMetadata.Sources = [.. SettingsUtility.GetEnabledSources(this.NuGetSettings)];
 		packageSpec.RestoreMetadata.FallbackFolders = [.. SettingsUtility.GetFallbackPackageFolders(this.NuGetSettings)];
