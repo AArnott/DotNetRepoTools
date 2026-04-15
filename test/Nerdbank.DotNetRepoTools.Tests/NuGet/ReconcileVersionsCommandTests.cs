@@ -37,5 +37,6 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 		await this.ExecuteCommandAsync();
 
 		AssertPackageVersion(this.packagesProps, "System.IO.Pipelines", "6.0.3");
+		Assert.False(Directory.Exists(Path.Combine(this.StagingDirectory, "nuget.frameworks")));
 	}
 }
