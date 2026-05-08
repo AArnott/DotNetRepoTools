@@ -23,7 +23,11 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 
 	protected static readonly OptionOrEnvVar ProjectOption = new("--project", "SYSTEM_TEAMPROJECT", isRequired: InferredRemoteInfo is null, "The AzDO project. Can also be inferred from the git origin remote URL.");
 
+	private const string AzureDevOpsScope = "499b84ac-1321-427f-aa17-267ca6975798/.default";
+
 	private HttpClient? httpClient;
+	private bool excludeManagedIdentityCredential;
+	private bool automaticCredentialAttemptFailedDueToManagedIdentity;
 
 	protected AzureDevOpsCommandBase()
 	{
@@ -120,8 +124,10 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		{
 			BaseAddress = new Uri($"{this.CollectionUri}{this.Project}/_apis/"),
 		};
+		result.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+		result.DefaultRequestHeaders.Add("X-TFS-FedAuthRedirect", "Suppress");
 
-		string? accessToken = this.AccessToken ?? this.AcquireAccessTokenAutomatically();
+		string? accessToken = this.AccessToken ?? this.AcquireAccessTokenAutomatically(this.excludeManagedIdentityCredential);
 		if (accessToken is not null)
 		{
 			result.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -133,24 +139,20 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 	/// <summary>
 	/// Attempts to automatically acquire an access token for Azure DevOps.
 	/// </summary>
+	/// <param name="excludeManagedIdentityCredential">A value indicating whether managed identity should be excluded from the credential chain for this attempt.</param>
 	/// <returns>The access token, or null if it could not be acquired.</returns>
-	protected virtual string? AcquireAccessTokenAutomatically()
+	protected virtual string? AcquireAccessTokenAutomatically(bool excludeManagedIdentityCredential)
 	{
+		this.automaticCredentialAttemptFailedDueToManagedIdentity = false;
+
 		try
 		{
-			// Use DefaultAzureCredential to automatically acquire credentials
-			// This will try multiple sources including:
-			// - Environment variables
-			// - Managed Identity
-			// - Visual Studio
-			// - Azure CLI
-			// - Azure PowerShell
-			// - Interactive browser (if needed)
-			DefaultAzureCredential credential = new DefaultAzureCredential();
+			DefaultAzureCredential credential = excludeManagedIdentityCredential
+				? new(new DefaultAzureCredentialOptions { ExcludeManagedIdentityCredential = true })
+				: new();
 
 			// Request an access token for Azure DevOps
 			// The scope 499b84ac-1321-427f-aa17-267ca6975798 is the Azure DevOps application ID
-			const string AzureDevOpsScope = "499b84ac-1321-427f-aa17-267ca6975798/.default";
 			TokenRequestContext tokenRequestContext = new TokenRequestContext(new[] { AzureDevOpsScope });
 			AccessToken token = credential.GetToken(tokenRequestContext, this.CancellationToken);
 
@@ -158,6 +160,8 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		}
 		catch (Azure.Identity.CredentialUnavailableException ex)
 		{
+			this.automaticCredentialAttemptFailedDueToManagedIdentity = !excludeManagedIdentityCredential && IsManagedIdentityCredentialFailure(ex);
+
 			// Log when credentials are unavailable if verbose mode is enabled
 			if (this.Verbose)
 			{
@@ -166,6 +170,8 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		}
 		catch (Azure.Identity.AuthenticationFailedException ex)
 		{
+			this.automaticCredentialAttemptFailedDueToManagedIdentity = !excludeManagedIdentityCredential && IsManagedIdentityCredentialFailure(ex);
+
 			// Log authentication failures if verbose mode is enabled
 			if (this.Verbose)
 			{
@@ -222,6 +228,23 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		}
 
 		HttpResponseMessage response = await this.HttpClient.SendAsync(request);
+		if (await this.ShouldRetryWithoutManagedIdentityAsync(request, response))
+		{
+			response.Dispose();
+			this.excludeManagedIdentityCredential = true;
+			this.httpClient?.Dispose();
+			this.httpClient = null;
+
+			using HttpRequestMessage retryRequest = await this.CloneHttpRequestMessageAsync(request);
+			if (this.Verbose)
+			{
+				this.Error.WriteLine("Retrying request without managed identity after an authentication failure.");
+				await this.WriteWhatIfAsync(retryRequest);
+			}
+
+			response = await this.HttpClient.SendAsync(retryRequest);
+		}
+
 		if (this.IsSuccessResponse(response))
 		{
 			if (this.Verbose && canReadContent)
@@ -257,6 +280,16 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 			{
 				ErrorResponseWithMessage? errorResponse = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.ErrorResponseWithMessage, this.CancellationToken);
 				this.Error.WriteLine(errorResponse?.Message ?? string.Empty);
+			}
+			else if (IsHtmlResponse(response))
+			{
+				this.Error.WriteLine("Authentication failed or Azure DevOps rejected the supplied credentials.");
+				this.Error.WriteLine("Provide --access-token or run with --verbose to inspect credential acquisition.");
+
+				if (this.Verbose)
+				{
+					this.Error.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
+				}
 			}
 			else
 			{
@@ -297,5 +330,74 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		}
 
 		return null;
+	}
+
+	private static bool IsAuthenticationFailureResponse(HttpResponseMessage response)
+	{
+		return response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.NonAuthoritativeInformation;
+	}
+
+	private static bool IsManagedIdentityCredentialFailure(Exception exception)
+	{
+		for (Exception? current = exception; current is not null; current = current.InnerException)
+		{
+			if (current.Message.Contains("ManagedIdentityCredential", StringComparison.Ordinal))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static bool IsHtmlResponse(HttpResponseMessage response)
+	{
+		string? mediaType = response.Content.Headers.ContentType?.MediaType;
+		return string.Equals(mediaType, "text/html", StringComparison.OrdinalIgnoreCase)
+			|| string.Equals(mediaType, "application/xhtml+xml", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private async Task<HttpRequestMessage> CloneHttpRequestMessageAsync(HttpRequestMessage request)
+	{
+		HttpRequestMessage clone = new(request.Method, request.RequestUri)
+		{
+			Version = request.Version,
+			VersionPolicy = request.VersionPolicy,
+		};
+
+		foreach (KeyValuePair<string, IEnumerable<string>> header in request.Headers)
+		{
+			clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+		}
+
+		if (request.Content is not null)
+		{
+			byte[] contentBytes = await request.Content.ReadAsByteArrayAsync(this.CancellationToken);
+			ByteArrayContent clonedContent = new(contentBytes);
+
+			foreach (KeyValuePair<string, IEnumerable<string>> header in request.Content.Headers)
+			{
+				clonedContent.Headers.TryAddWithoutValidation(header.Key, header.Value);
+			}
+
+			clone.Content = clonedContent;
+		}
+
+		return clone;
+	}
+
+	private async Task<bool> ShouldRetryWithoutManagedIdentityAsync(HttpRequestMessage request, HttpResponseMessage response)
+	{
+		if (this.excludeManagedIdentityCredential || this.AccessToken is not null || !this.automaticCredentialAttemptFailedDueToManagedIdentity || !IsAuthenticationFailureResponse(response))
+		{
+			return false;
+		}
+
+		if (this.Verbose)
+		{
+			this.Error.WriteLine($"The request to {new Uri(this.HttpClient.BaseAddress!, request.RequestUri!).AbsoluteUri} failed after a managed identity credential error.");
+		}
+
+		return true;
 	}
 }
