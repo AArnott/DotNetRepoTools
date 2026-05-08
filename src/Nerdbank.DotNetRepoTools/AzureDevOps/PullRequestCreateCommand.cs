@@ -14,6 +14,8 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 	protected static readonly Option<string> TargetRefNameOption = new("--target") { Description = "The name of the branch to merge into. This should not include the refs/heads/ prefix.", Required = true };
 	protected static readonly Option<bool> IsDraftOption = new("--draft") { Description = "Whether the pull request is a draft." };
 	protected static readonly Option<string[]> LabelsOption = new("--labels") { Description = "Labels to apply to the pull request.", AllowMultipleArgumentsPerToken = true };
+	protected static readonly Option<OutputFormat> FormatOption = new("--format") { Description = "The output format to write." };
+	private const string JsonOutputFormat = "json";
 
 	public PullRequestCreateCommand()
 	{
@@ -29,6 +31,7 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 		this.TargetRefName = parseResult.GetValue(TargetRefNameOption)!;
 		this.IsDraft = parseResult.GetValue(IsDraftOption);
 		this.Labels = parseResult.GetValue(LabelsOption);
+		this.Format = parseResult.GetValue(FormatOption);
 
 		this.GetDescriptionFromStdIn = this.Description is null && parseResult.Tokens.Any(t => DescriptionOption.HasAlias(t.Value));
 	}
@@ -47,6 +50,8 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 
 	public string[]? Labels { get; init; }
 
+	public OutputFormat Format { get; init; }
+
 	internal static new Command CreateCommand()
 	{
 		Command command = new("create", "Creates a new pull request.")
@@ -57,6 +62,7 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 			TargetRefNameOption,
 			IsDraftOption,
 			LabelsOption,
+			FormatOption,
 		};
 		AddCommonOptions(command);
 
@@ -101,12 +107,19 @@ internal class PullRequestCreateCommand : PullRequestCommandBase
 		{
 			if (response.Content.Headers.ContentType?.MediaType == "application/json")
 			{
-				PullRequest? pr = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.PullRequest, this.CancellationToken);
-				if (pr is not null)
+				if (this.Format == OutputFormat.Json)
 				{
-					this.Out.WriteLine($"Pull request {pr.PullRequestId} created.");
-					string prUrl = $"{pr.Repository.WebUrl}/pullrequest/{pr.PullRequestId}";
-					this.Out.WriteLine(prUrl);
+					this.Out.WriteLine(await response.Content.ReadAsStringAsync(this.CancellationToken));
+				}
+				else
+				{
+					PullRequest? pr = await response.Content.ReadFromJsonAsync(SourceGenerationContext.Default.PullRequest, this.CancellationToken);
+					if (pr is not null)
+					{
+						this.Out.WriteLine($"Pull request {pr.PullRequestId} created.");
+						string prUrl = $"{pr.Repository.WebUrl}/pullrequest/{pr.PullRequestId}";
+						this.Out.WriteLine(prUrl);
+					}
 				}
 			}
 		}
