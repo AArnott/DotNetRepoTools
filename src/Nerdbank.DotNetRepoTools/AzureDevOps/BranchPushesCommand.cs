@@ -8,18 +8,6 @@ using System.Text.Json;
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
 /// <summary>
-/// The output format for the <see cref="BranchPushesCommand"/>.
-/// </summary>
-internal enum OutputFormat
-{
-	/// <summary>Human-readable text output (default).</summary>
-	Text,
-
-	/// <summary>JSON output as returned by the Azure DevOps REST API.</summary>
-	Json,
-}
-
-/// <summary>
 /// Lists recent pushes to a branch.
 /// </summary>
 internal class BranchPushesCommand : BranchCommandBase
