@@ -76,6 +76,8 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 
 	protected override async Task ExecuteCoreAsync()
 	{
+		JsonObject? currentPRData = null;
+
 		JsonObject body = new();
 
 		if (this.Title is not null)
@@ -137,8 +139,22 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 			{
 				PullRequestStatus.Active => "active",
 				PullRequestStatus.Abandoned => "abandoned",
+				PullRequestStatus.Completed => "completed",
 				_ => throw new NotSupportedException($"Unsupported status: {status}"),
 			};
+
+			if (status == PullRequestStatus.Completed)
+			{
+				// We must also specify the lastMergeSourceCommit when completing/closing PRs.
+				await GetCurrentPRDetailsAsync();
+				if (currentPRData is null)
+				{
+					this.Error.WriteLine("Unable to determine current pull request details. Status will not be updated.");
+					return;
+				}
+
+				body["lastMergeSourceCommit"] = new JsonObject { ["commitId"] = currentPRData["lastMergeSourceCommit"]!["commitId"]!.GetValue<string>() };
+			}
 		}
 
 		if (body.Count == 0)
@@ -159,6 +175,26 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 		if (this.IsSuccessResponse(response))
 		{
 			this.Out.WriteLine("OK");
+		}
+
+		async ValueTask<JsonObject?> GetCurrentPRDetailsAsync()
+		{
+			if (currentPRData is not null)
+			{
+				return currentPRData;
+			}
+
+			HttpRequestMessage request = new(HttpMethod.Get, "?api-version=7.1");
+			HttpResponseMessage? response = await this.SendAsync(request, canReadContent: false);
+			if (this.IsSuccessResponse(response))
+			{
+				return currentPRData = (JsonObject?)JsonNode.Parse(await response.Content.ReadAsStringAsync(this.CancellationToken));
+			}
+			else
+			{
+				await this.PrintErrorMessageAsync(response);
+				return null;
+			}
 		}
 	}
 }
