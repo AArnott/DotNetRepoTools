@@ -54,7 +54,7 @@ if ($downloadExitCode -ne 0) {
 }
 
 # Return the path to the downloaded package directory (dotnet package download uses lowercase id)
-$packageIdLower = $PackageId.ToLower()
+$packageIdLower = $PackageId.ToLowerInvariant()
 if ($Version) {
     $packageRoot = Join-Path $OutputDirectory $packageIdLower
     $packageDir = Get-ChildItem -Path $packageRoot -Directory -ErrorAction SilentlyContinue |
@@ -73,5 +73,5 @@ if ($Version) {
 if ($packageDir -and (Test-Path $packageDir)) {
     Write-Output $packageDir
 } else {
-    Write-Error "Package directory not found after download."
+    throw "Package directory not found after download. PackageId='$PackageId'; Version='$Version'; OutputDirectory='$OutputDirectory'; PackageRoot='$packageRoot'."
 }
