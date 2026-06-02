@@ -27,14 +27,14 @@ internal static class ProjectGraphInputLoader
 	/// <param name="isExcludedProjectPath">A predicate that identifies excluded projects.</param>
 	/// <param name="cancellationToken">A cancellation token.</param>
 	/// <returns>The loaded graph input.</returns>
-	internal static async Task<GraphInput> LoadAsync(string inputPath, Func<string, bool> isExcludedProjectPath, CancellationToken cancellationToken)
+	internal static async Task<ProjectGraphInput> LoadAsync(string inputPath, Func<string, bool> isExcludedProjectPath, CancellationToken cancellationToken)
 	{
 		string extension = Path.GetExtension(inputPath);
 		if (!extension.Equals(".sln", StringComparison.OrdinalIgnoreCase)
 			&& !extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase))
 		{
-			return new GraphInput(
-				InputKind.Project,
+			return new ProjectGraphInput(
+				ProjectGraphInputKind.Project,
 				isExcludedProjectPath(inputPath) ? [] : [new ProjectGraphEntryPoint(inputPath)],
 				new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 		}
@@ -57,8 +57,8 @@ internal static class ProjectGraphInputLoader
 			entryPoints.Add(new ProjectGraphEntryPoint(projectPath));
 		}
 
-		return new GraphInput(
-			extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase) ? InputKind.Slnx : InputKind.Sln,
+		return new ProjectGraphInput(
+			extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase) ? ProjectGraphInputKind.Slnx : ProjectGraphInputKind.Sln,
 			entryPoints,
 			explicitProjects);
 	}
@@ -67,36 +67,4 @@ internal static class ProjectGraphInputLoader
 		=> NormalizePath(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory, path));
 
 	private static string NormalizePath(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-
-	/// <summary>
-	/// The supported kinds of graph inputs.
-	/// </summary>
-	internal enum InputKind
-	{
-		/// <summary>
-		/// A single project file.
-		/// </summary>
-		Project,
-
-		/// <summary>
-		/// A traditional Visual Studio solution file.
-		/// </summary>
-		Sln,
-
-		/// <summary>
-		/// A solution XML file.
-		/// </summary>
-		Slnx,
-	}
-
-	/// <summary>
-	/// The entry points and metadata used to build a project graph.
-	/// </summary>
-	/// <param name="InputKind">The kind of input file.</param>
-	/// <param name="EntryPoints">The graph entry points.</param>
-	/// <param name="ExplicitSolutionProjects">The projects explicitly listed in the solution, if any.</param>
-	internal sealed record GraphInput(
-		InputKind InputKind,
-		IReadOnlyList<ProjectGraphEntryPoint> EntryPoints,
-		HashSet<string> ExplicitSolutionProjects);
 }

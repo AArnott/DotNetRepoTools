@@ -188,7 +188,7 @@ public class GraphCommand : MSBuildCommandBase
 
 		try
 		{
-			ProjectGraphInputLoader.GraphInput graphInput = await ProjectGraphInputLoader.LoadAsync(fullInputPath, projectPath => IsExcludedProjectPath(projectPath, excludedProjectPathPatterns), this.CancellationToken);
+			ProjectGraphInput graphInput = await ProjectGraphInputLoader.LoadAsync(fullInputPath, projectPath => IsExcludedProjectPath(projectPath, excludedProjectPathPatterns), this.CancellationToken);
 			GraphModel graphModel = graphInput.EntryPoints.Count > 0
 				? BuildGraphModel(new ProjectGraph(graphInput.EntryPoints), graphInput.ExplicitSolutionProjects, excludedProjectPathPatterns, groupingPaths, highlightRules, fullInputPath, graphInput.InputKind, emittedPathBaseDirectory)
 				: new GraphModel([], [], []);
@@ -215,7 +215,7 @@ public class GraphCommand : MSBuildCommandBase
 		return string.Join(Environment.NewLine + "Caused by: ", messages);
 	}
 
-	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlyList<Regex> excludedProjectPathPatterns, IReadOnlySet<string> groupingPaths, IReadOnlyList<ProjectHighlightRuleModel> highlightRules, string inputPath, ProjectGraphInputLoader.InputKind inputKind, string emittedPathBaseDirectory)
+	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlyList<Regex> excludedProjectPathPatterns, IReadOnlySet<string> groupingPaths, IReadOnlyList<ProjectHighlightRuleModel> highlightRules, string inputPath, ProjectGraphInputKind inputKind, string emittedPathBaseDirectory)
 	{
 		Dictionary<string, GraphNodeModel> projectNodesByPath = new(StringComparer.OrdinalIgnoreCase);
 		List<GraphNodeModel> containerNodes = [];
@@ -250,7 +250,7 @@ public class GraphCommand : MSBuildCommandBase
 		{
 			AddGroupingContainers(groupingPaths, projectNodesByPath.Values, groupingContainerNodesByPath, containerNodes, edges, edgeKeys, emittedPathBaseDirectory);
 		}
-		else if (inputKind == ProjectGraphInputLoader.InputKind.Slnx && projectNodesByPath.Values.Any(node => node.IsExplicitSolutionProject))
+		else if (inputKind == ProjectGraphInputKind.Slnx && projectNodesByPath.Values.Any(node => node.IsExplicitSolutionProject))
 		{
 			AddSlnxExplicitProjectsContainer(inputPath, projectNodesByPath.Values.Where(node => node.IsExplicitSolutionProject), containerNodes, edges, edgeKeys);
 		}

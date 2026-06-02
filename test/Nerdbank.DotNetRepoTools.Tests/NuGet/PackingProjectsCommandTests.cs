@@ -61,7 +61,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		this.Command = new()
 		{
 			InputPath = rootProjectPath,
-			Format = PackingProjectsCommand.PackingProjectsOutputFormat.Json,
+			Format = PackingProjectsOutputFormat.Json,
 		};
 
 		await this.ExecuteCommandAsync();
@@ -175,9 +175,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Directory.CreateDirectory(nuProjDirectory);
 
 		string packedProjectPath = Path.Combine(packedProjectDirectory, "Packed.csproj");
-		await File.WriteAllTextAsync(
-			packedProjectPath,
-			"""
+		string packedProjectContent = """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
 				<TargetFramework>net8.0</TargetFramework>
@@ -185,13 +183,14 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 				<PackageId>Contoso.Packed</PackageId>
 			  </PropertyGroup>
 			</Project>
-			""",
+			""";
+		await File.WriteAllTextAsync(
+			packedProjectPath,
+			packedProjectContent,
 			TestContext.Current.CancellationToken);
 
 		string multiTargetProjectPath = Path.Combine(multiTargetProjectDirectory, "Multi.csproj");
-		await File.WriteAllTextAsync(
-			multiTargetProjectPath,
-			"""
+		string multiTargetProjectContent = """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
 				<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
@@ -199,13 +198,14 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 				<PackageId>Contoso.Multi</PackageId>
 			  </PropertyGroup>
 			</Project>
-			""",
+			""";
+		await File.WriteAllTextAsync(
+			multiTargetProjectPath,
+			multiTargetProjectContent,
 			TestContext.Current.CancellationToken);
 
 		string disabledPackProjectPath = Path.Combine(disabledPackProjectDirectory, "DisabledPack.csproj");
-		await File.WriteAllTextAsync(
-			disabledPackProjectPath,
-			"""
+		string disabledPackProjectContent = """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
 				<TargetFramework>net8.0</TargetFramework>
@@ -213,26 +213,28 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 				<PackageId>Contoso.Disabled</PackageId>
 			  </PropertyGroup>
 			</Project>
-			""",
+			""";
+		await File.WriteAllTextAsync(
+			disabledPackProjectPath,
+			disabledPackProjectContent,
 			TestContext.Current.CancellationToken);
 
 		string nuProjPath = Path.Combine(nuProjDirectory, "Legacy.nuproj");
-		await File.WriteAllTextAsync(
-			nuProjPath,
-			"""
+		string nuProjContent = """
 			<Project>
 			  <PropertyGroup>
 				<TargetFramework>net8.0</TargetFramework>
 				<PackageName>Contoso.Legacy</PackageName>
 			  </PropertyGroup>
 			</Project>
-			""",
+			""";
+		await File.WriteAllTextAsync(
+			nuProjPath,
+			nuProjContent,
 			TestContext.Current.CancellationToken);
 
 		string rootProjectPath = Path.Combine(rootProjectDirectory, "App.csproj");
-		await File.WriteAllTextAsync(
-			rootProjectPath,
-			$$"""
+		string rootProjectContent = $$"""
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
 				<TargetFramework>net8.0</TargetFramework>
@@ -244,7 +246,10 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 				<ProjectReference Include="{{Path.GetRelativePath(rootProjectDirectory, nuProjPath)}}" />
 			  </ItemGroup>
 			</Project>
-			""",
+			""";
+		await File.WriteAllTextAsync(
+			rootProjectPath,
+			rootProjectContent,
 			TestContext.Current.CancellationToken);
 
 		return (rootProjectPath, packedProjectPath, multiTargetProjectPath, nuProjPath, disabledPackProjectPath);

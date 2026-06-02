@@ -87,7 +87,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 
 		try
 		{
-			ProjectGraphInputLoader.GraphInput graphInput = await ProjectGraphInputLoader.LoadAsync(fullInputPath, static _ => false, this.CancellationToken);
+			ProjectGraphInput graphInput = await ProjectGraphInputLoader.LoadAsync(fullInputPath, static _ => false, this.CancellationToken);
 			IReadOnlyList<PackingProjectInfo> packingProjects = graphInput.EntryPoints.Count > 0
 				? FindPackingProjects(new ProjectGraph(graphInput.EntryPoints), ResolveDisplayPathBaseDirectory(fullInputPath))
 				: [];
@@ -215,20 +215,4 @@ public class PackingProjectsCommand : MSBuildCommandBase
 	/// <param name="PackageId">The NuGet package ID.</param>
 	/// <param name="ProjectPath">The path to the project that produces the package.</param>
 	internal sealed record PackingProjectInfo(string PackageId, string ProjectPath);
-
-	/// <summary>
-	/// The supported output formats.
-	/// </summary>
-	public enum PackingProjectsOutputFormat
-	{
-		/// <summary>
-		/// Human-readable text output.
-		/// </summary>
-		Text,
-
-		/// <summary>
-		/// JSON output.
-		/// </summary>
-		Json,
-	}
 }
