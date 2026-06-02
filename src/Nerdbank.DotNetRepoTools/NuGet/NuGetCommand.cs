@@ -20,6 +20,7 @@ internal class NuGetCommand
 		DefaultCredentialServiceUtility.SetupDefaultCredentialService(NullLogger.Instance, nonInteractive: true);
 		Command nuget = new("nuget", "NuGet maintenance commands")
 		{
+			PackingProjectsCommand.CreateCommand(),
 			ReconcileVersionsCommand.CreateCommand(),
 			UpgradeCommand.CreateCommand(),
 			TrimCommand.CreateCommand(),

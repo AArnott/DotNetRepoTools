@@ -4,6 +4,7 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Nerdbank.DotNetRepoTools.AzureDevOps;
+using Nerdbank.DotNetRepoTools.NuGet;
 
 namespace Nerdbank.DotNetRepoTools;
 
@@ -25,6 +26,8 @@ namespace Nerdbank.DotNetRepoTools;
 [JsonSerializable(typeof(GitRefUpdate))]
 [JsonSerializable(typeof(GitCommitRef))]
 [JsonSerializable(typeof(AzDOArray<GitCommitRef>))]
+[JsonSerializable(typeof(PackingProjectsCommand.PackingProjectInfo))]
+[JsonSerializable(typeof(PackingProjectsCommand.PackingProjectInfo[]))]
 [JsonSerializable(typeof(JsonNode))]
 [JsonSerializable(typeof(List<JsonPatch>))]
 internal partial class SourceGenerationContext : JsonSerializerContext
