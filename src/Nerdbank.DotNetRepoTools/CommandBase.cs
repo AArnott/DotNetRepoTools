@@ -177,13 +177,17 @@ public abstract class CommandBase : IDisposable
 				return null;
 			}
 
-			string output = process.StandardOutput.ReadToEnd().Trim();
+			Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+			Task<string> stderrTask = process.StandardError.ReadToEndAsync();
 			if (!process.WaitForExit(5000))
 			{
 				process.Kill(entireProcessTree: true);
+				process.WaitForExit();
 				return null;
 			}
 
+			Task.WaitAll(stdoutTask, stderrTask);
+			string output = stdoutTask.Result.Trim();
 			return process.ExitCode == 0 && output.Length > 0 ? output : null;
 		}
 		catch (InvalidOperationException)

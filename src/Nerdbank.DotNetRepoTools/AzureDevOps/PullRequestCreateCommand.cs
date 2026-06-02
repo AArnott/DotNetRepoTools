@@ -15,8 +15,8 @@ public class PullRequestCreateCommand : PullRequestCommandBase
 
 	private static readonly Option<string> TitleOption = new("--title") { Description = "The title of the pull request.", Required = true };
 	private static readonly Option<string> DescriptionOption = new("--description") { Description = "The description of the pull request. If an argument for this option is not specified on the command line, it will be pulled in from STDIN.", Arity = ArgumentArity.ZeroOrOne };
-	private static readonly Option<string> SourceRefNameOption = new("--source") { Description = "The name of the branch to merge from. This should not include the refs/heads/ prefix. Defaults to the current git branch when omitted." };
-	private static readonly Option<string> TargetRefNameOption = new("--target") { Description = "The name of the branch to merge into. This should not include the refs/heads/ prefix. Defaults to the repository's Azure DevOps default branch when omitted." };
+	private static readonly Option<string> SourceRefNameOption = new("--source") { Description = "The name of the branch to merge from. This may be a short branch name or a fully-qualified ref such as refs/heads/main. Defaults to the current git branch when omitted." };
+	private static readonly Option<string> TargetRefNameOption = new("--target") { Description = "The name of the branch to merge into. This may be a short branch name or a fully-qualified ref such as refs/heads/main. Defaults to the repository's Azure DevOps default branch when omitted." };
 	private static readonly Option<bool> IsDraftOption = new("--draft") { Description = "Whether the pull request is a draft." };
 	private static readonly Option<string[]> LabelsOption = new("--labels") { Description = "Labels to apply to the pull request.", AllowMultipleArgumentsPerToken = true };
 	private static readonly Option<OutputFormat> FormatOption = new("--format") { Description = "The output format to write." };
@@ -64,12 +64,14 @@ public class PullRequestCreateCommand : PullRequestCommandBase
 	public bool GetDescriptionFromStdIn { get; init; }
 
 	/// <summary>
-	/// Gets the source branch name, without the <c>refs/heads/</c> prefix.
+	/// Gets the source branch name.
+	/// This may be a short branch name or a fully-qualified ref such as <c>refs/heads/main</c>.
 	/// </summary>
 	public string? SourceRefName { get; init; }
 
 	/// <summary>
-	/// Gets the target branch name, without the <c>refs/heads/</c> prefix.
+	/// Gets the target branch name.
+	/// This may be a short branch name or a fully-qualified ref such as <c>refs/heads/main</c>.
 	/// </summary>
 	public string? TargetRefName { get; init; }
 

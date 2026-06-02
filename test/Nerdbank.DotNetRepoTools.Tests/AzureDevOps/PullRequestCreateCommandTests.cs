@@ -24,7 +24,11 @@ public class PullRequestCreateCommandTests : TestBase
 		Environment.CurrentDirectory = this.originalCurrentDirectory;
 		if (this.command is not null)
 		{
-			this.DumpConsole((StringWriter)this.command.Out, (StringWriter)this.command.Error);
+			if (this.command.Out is StringWriter outWriter && this.command.Error is StringWriter errorWriter)
+			{
+				this.DumpConsole(outWriter, errorWriter);
+			}
+
 			this.command.Dispose();
 		}
 
@@ -66,6 +70,8 @@ public class PullRequestCreateCommandTests : TestBase
 	{
 		Account = "fabrikam",
 		CollectionUri = "https://dev.azure.com/fabrikam/",
+		Error = new StringWriter(),
+		Out = new StringWriter(),
 		Project = "Project",
 		Repo = "Repo",
 		SourceRefName = sourceRefName,
@@ -76,8 +82,6 @@ public class PullRequestCreateCommandTests : TestBase
 	private async Task ExecuteCommandAsync()
 	{
 		Assert.NotNull(this.command);
-		this.command.Out = new StringWriter();
-		this.command.Error = new StringWriter();
 		this.MSBuild.SaveAll();
 		await this.command.ExecuteAndDisposeAsync();
 		this.MSBuild.ReloadEverything();
