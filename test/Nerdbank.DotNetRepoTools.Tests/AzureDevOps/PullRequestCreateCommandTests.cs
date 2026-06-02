@@ -94,8 +94,8 @@ public class PullRequestCreateCommandTests : TestBase
 	{
 		string repoPath = Path.Combine(this.StagingDirectory, Path.GetRandomFileName());
 		Directory.CreateDirectory(repoPath);
-		await RunGitAsync(repoPath, "init");
-		await RunGitAsync(repoPath, $"checkout -b {branchName}");
+		await this.RunGitAsync(repoPath, "init");
+		await this.RunGitAsync(repoPath, $"checkout -b {branchName}");
 		return repoPath;
 	}
 

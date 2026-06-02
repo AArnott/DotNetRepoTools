@@ -14,13 +14,13 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 /// </summary>
 public abstract class AzureDevOpsCommandBase : CommandBase
 {
-	private const string AzureDevOpsScope = "499b84ac-1321-427f-aa17-267ca6975798/.default";
-
 	/// <summary>
 	/// Inferred Azure DevOps remote information from the local git repository's <c>origin</c> remote URL.
 	/// Evaluated before option fields so we can determine whether options are required.
 	/// </summary>
 	private protected static readonly AzDoRemoteInfo? InferredRemoteInfo = AzDoRemoteInfo.TryInferFromGitRemote();
+
+	private const string AzureDevOpsScope = "499b84ac-1321-427f-aa17-267ca6975798/.default";
 
 	private static readonly OptionOrEnvVar AccessTokenOption = new("--access-token", "SYSTEM_ACCESSTOKEN", isRequired: false, description: "The access token to use to authenticate against the AzDO REST API. If not specified but the SYSTEM_ACCESSTOKEN environment variable is set, that value will be used. Otherwise the tool will attempt to acquire a token automatically from Visual Studio or Windows credentials.", doNotAppendToDescription: true);
 
