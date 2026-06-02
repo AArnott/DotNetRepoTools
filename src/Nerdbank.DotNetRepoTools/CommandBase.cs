@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using Microsoft;
 
@@ -145,6 +147,65 @@ public abstract class CommandBase : IDisposable
 
 		return null;
 	}
+
+	/// <summary>
+	/// Executes a git command from the current repository and returns its trimmed standard output.
+	/// </summary>
+	/// <param name="arguments">The git arguments to pass.</param>
+	/// <param name="startingPath">An optional path within the repository.</param>
+	/// <returns>The command output, or <see langword="null"/> if the repository or command could not be resolved.</returns>
+	internal static string? TryQueryGit(string arguments, string? startingPath = null)
+	{
+		string? repoRoot = FindGitRepoRoot(startingPath);
+		if (repoRoot is null)
+		{
+			return null;
+		}
+
+		ProcessStartInfo psi = new("git", arguments)
+		{
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			WorkingDirectory = repoRoot,
+		};
+
+		try
+		{
+			using Process? process = Process.Start(psi);
+			if (process is null)
+			{
+				return null;
+			}
+
+			Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+			Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+			if (!process.WaitForExit(5000))
+			{
+				process.Kill(entireProcessTree: true);
+				process.WaitForExit();
+				return null;
+			}
+
+			Task.WaitAll(stdoutTask, stderrTask);
+			string output = stdoutTask.Result.Trim();
+			return process.ExitCode == 0 && output.Length > 0 ? output : null;
+		}
+		catch (InvalidOperationException)
+		{
+			return null;
+		}
+		catch (Win32Exception)
+		{
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// Attempts to identify the currently checked out git branch.
+	/// </summary>
+	/// <param name="startingPath">An optional path within the repository.</param>
+	/// <returns>The current branch name, or <see langword="null"/> if it could not be determined.</returns>
+	internal static string? TryGetCurrentGitBranch(string? startingPath = null) => TryQueryGit("branch --show-current", startingPath);
 
 	/// <summary>
 	/// Adds common options to the specified command.

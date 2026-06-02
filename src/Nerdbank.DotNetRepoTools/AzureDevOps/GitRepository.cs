@@ -16,4 +16,9 @@ internal class GitRepository
 	public required string Url { get; set; }
 
 	public required string WebUrl { get; set; }
+
+	/// <summary>
+	/// Gets or sets the repository's default branch as a fully-qualified ref, for example <c>refs/heads/main</c>.
+	/// </summary>
+	public string? DefaultBranch { get; set; }
 }

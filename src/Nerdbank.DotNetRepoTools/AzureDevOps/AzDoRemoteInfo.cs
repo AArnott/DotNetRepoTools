@@ -1,7 +1,6 @@
 // Copyright (c) Andrew Arnott. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
@@ -82,40 +81,8 @@ internal partial class AzDoRemoteInfo
 	/// <returns>An <see cref="AzDoRemoteInfo"/> instance if inference succeeded; otherwise, <see langword="null"/>.</returns>
 	public static AzDoRemoteInfo? TryInferFromGitRemote()
 	{
-		try
-		{
-			string? repoRoot = CommandBase.FindGitRepoRoot();
-			if (repoRoot is null)
-			{
-				return null;
-			}
-
-			ProcessStartInfo psi = new("git", "remote get-url origin")
-			{
-				RedirectStandardOutput = true,
-				RedirectStandardError = true,
-				WorkingDirectory = repoRoot,
-			};
-
-			using Process? process = Process.Start(psi);
-			if (process is null)
-			{
-				return null;
-			}
-
-			string url = process.StandardOutput.ReadToEnd().Trim();
-			process.WaitForExit(5000);
-			if (process.ExitCode != 0 || string.IsNullOrEmpty(url))
-			{
-				return null;
-			}
-
-			return TryParse(url);
-		}
-		catch
-		{
-			return null;
-		}
+		string? url = CommandBase.TryQueryGit("remote get-url origin");
+		return TryParse(url);
 	}
 
 	[GeneratedRegex(@"^https?://(?:[^@]+@)?dev\.azure\.com/(?<org>[^/]+)/(?<project>[^/]+)/_git/(?:_optimized/)?(?<repo>[^/]+?)(?:\.git)?/?$", RegexOptions.IgnoreCase)]
