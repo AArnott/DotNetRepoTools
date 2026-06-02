@@ -16,4 +16,6 @@ internal class GitRepository
 	public required string Url { get; set; }
 
 	public required string WebUrl { get; set; }
+
+	public string? DefaultBranch { get; set; }
 }

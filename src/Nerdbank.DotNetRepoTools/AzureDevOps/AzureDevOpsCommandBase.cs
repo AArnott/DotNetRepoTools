@@ -9,30 +9,41 @@ using Azure.Identity;
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
-internal abstract class AzureDevOpsCommandBase : CommandBase
+/// <summary>
+/// Base type for Azure DevOps commands.
+/// </summary>
+public abstract class AzureDevOpsCommandBase : CommandBase
 {
+	private const string AzureDevOpsScope = "499b84ac-1321-427f-aa17-267ca6975798/.default";
+
 	/// <summary>
 	/// Inferred Azure DevOps remote information from the local git repository's <c>origin</c> remote URL.
 	/// Evaluated before option fields so we can determine whether options are required.
 	/// </summary>
-	protected static readonly AzDoRemoteInfo? InferredRemoteInfo = AzDoRemoteInfo.TryInferFromGitRemote();
+	private protected static readonly AzDoRemoteInfo? InferredRemoteInfo = AzDoRemoteInfo.TryInferFromGitRemote();
 
-	protected static readonly OptionOrEnvVar AccessTokenOption = new("--access-token", "SYSTEM_ACCESSTOKEN", isRequired: false, description: "The access token to use to authenticate against the AzDO REST API. If not specified but the SYSTEM_ACCESSTOKEN environment variable is set, that value will be used. Otherwise the tool will attempt to acquire a token automatically from Visual Studio or Windows credentials.", doNotAppendToDescription: true);
+	private static readonly OptionOrEnvVar AccessTokenOption = new("--access-token", "SYSTEM_ACCESSTOKEN", isRequired: false, description: "The access token to use to authenticate against the AzDO REST API. If not specified but the SYSTEM_ACCESSTOKEN environment variable is set, that value will be used. Otherwise the tool will attempt to acquire a token automatically from Visual Studio or Windows credentials.", doNotAppendToDescription: true);
 
-	protected static readonly OptionOrEnvVar AccountOption = new("--account", "SYSTEM_COLLECTIONURI", isRequired: InferredRemoteInfo is null, "The AzDO account (organization) or URI (e.g. \"fabrikamfiber\" or \"https://dev.azure.com/fabrikamfiber/\". Can also be inferred from the git origin remote URL.");
+	private static readonly OptionOrEnvVar AccountOption = new("--account", "SYSTEM_COLLECTIONURI", isRequired: InferredRemoteInfo is null, "The AzDO account (organization) or URI (e.g. \"fabrikamfiber\" or \"https://dev.azure.com/fabrikamfiber/\". Can also be inferred from the git origin remote URL.");
 
-	protected static readonly OptionOrEnvVar ProjectOption = new("--project", "SYSTEM_TEAMPROJECT", isRequired: InferredRemoteInfo is null, "The AzDO project. Can also be inferred from the git origin remote URL.");
-
-	private const string AzureDevOpsScope = "499b84ac-1321-427f-aa17-267ca6975798/.default";
+	private static readonly OptionOrEnvVar ProjectOption = new("--project", "SYSTEM_TEAMPROJECT", isRequired: InferredRemoteInfo is null, "The AzDO project. Can also be inferred from the git origin remote URL.");
 
 	private HttpClient? httpClient;
 	private bool excludeManagedIdentityCredential;
 	private bool automaticCredentialAttemptFailedDueToManagedIdentity;
 
+	/// <summary>
+	/// Initializes a new instance of the <see cref="AzureDevOpsCommandBase"/> class.
+	/// </summary>
 	protected AzureDevOpsCommandBase()
 	{
 	}
 
+	/// <summary>
+	/// Initializes a new instance of the <see cref="AzureDevOpsCommandBase"/> class from parsed command-line data.
+	/// </summary>
+	/// <param name="parseResult">The parsed command-line result.</param>
+	/// <param name="cancellationToken">The cancellation token.</param>
 	[SetsRequiredMembers]
 	protected AzureDevOpsCommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
 		: base(parseResult, cancellationToken)
@@ -61,6 +72,9 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		}
 	}
 
+	/// <summary>
+	/// Gets the Azure DevOps access token, if one was explicitly supplied.
+	/// </summary>
 	public string? AccessToken { get; init; }
 
 	/// <summary>
@@ -71,10 +85,19 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 	/// </value>
 	public required string CollectionUri { get; init; }
 
+	/// <summary>
+	/// Gets the Azure DevOps account name.
+	/// </summary>
 	public required string Account { get; init; }
 
+	/// <summary>
+	/// Gets the Azure DevOps project name.
+	/// </summary>
 	public required string Project { get; init; }
 
+	/// <summary>
+	/// Gets the HTTP client used for Azure DevOps requests.
+	/// </summary>
 	public HttpClient HttpClient => this.httpClient ??= this.CreateHttpClient();
 
 	/// <summary>
@@ -93,6 +116,10 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		return git;
 	}
 
+	/// <summary>
+	/// Adds common Azure DevOps options to the specified command.
+	/// </summary>
+	/// <param name="command">The command to add options to.</param>
 	protected static new void AddCommonOptions(Command command)
 	{
 		CommandBase.AddCommonOptions(command);
@@ -105,6 +132,11 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		command.Options.Add(ProjectOption);
 	}
 
+	/// <summary>
+	/// Converts the first character of a string to lowercase.
+	/// </summary>
+	/// <param name="value">The value to transform.</param>
+	/// <returns>The camel-cased value, or <see langword="null"/>.</returns>
 	[return: NotNullIfNotNull(nameof(value))]
 	protected static string? CamelCase(string? value)
 	{
@@ -116,8 +148,18 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		return value.Length == 0 ? string.Empty : (char.ToLower(value[0]) + value[1..]);
 	}
 
+	/// <summary>
+	/// Adds a git ref prefix when the supplied ref name is not already fully qualified.
+	/// </summary>
+	/// <param name="defaultPrefix">The prefix to apply.</param>
+	/// <param name="refName">The ref name to normalize.</param>
+	/// <returns>The fully qualified ref name.</returns>
 	protected static string PrefixRef(string defaultPrefix, string refName) => refName.StartsWith("refs/") ? refName : defaultPrefix + refName;
 
+	/// <summary>
+	/// Creates the HTTP client used for Azure DevOps requests.
+	/// </summary>
+	/// <returns>The HTTP client.</returns>
 	protected virtual HttpClient CreateHttpClient()
 	{
 		HttpClient result = new()
@@ -182,6 +224,11 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		return null;
 	}
 
+	/// <summary>
+	/// Writes an HTTP request in the same format used by <c>--what-if</c> and verbose output.
+	/// </summary>
+	/// <param name="request">The request to describe.</param>
+	/// <returns>A task that completes when the output has been written.</returns>
 	protected async Task WriteWhatIfAsync(HttpRequestMessage request)
 	{
 		this.Out.WriteLine($"{request.Method} {new Uri(this.HttpClient.BaseAddress!, request.RequestUri!).AbsoluteUri}");
@@ -267,6 +314,11 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		return response;
 	}
 
+	/// <summary>
+	/// Prints a human-readable error message for a failed response.
+	/// </summary>
+	/// <param name="response">The response to inspect.</param>
+	/// <returns>A task that completes when the message has been written.</returns>
 	protected virtual async Task PrintErrorMessageAsync(HttpResponseMessage? response)
 	{
 		if (response is null)
@@ -298,8 +350,17 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		}
 	}
 
+	/// <summary>
+	/// Determines whether a response represents a successful Azure DevOps call.
+	/// </summary>
+	/// <param name="response">The response to inspect.</param>
+	/// <returns><see langword="true"/> if the response is successful; otherwise, <see langword="false"/>.</returns>
 	protected virtual bool IsSuccessResponse([NotNullWhen(true)] HttpResponseMessage? response) => response is { IsSuccessStatusCode: true, StatusCode: not HttpStatusCode.NonAuthoritativeInformation };
 
+	/// <summary>
+	/// Gets the current user's Azure DevOps identity ID.
+	/// </summary>
+	/// <returns>The identity ID, or <see langword="null"/> if it could not be determined.</returns>
 	protected async Task<string?> WhoAmIAsync()
 	{
 		HttpRequestMessage request = new(HttpMethod.Get, "https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1");
@@ -316,6 +377,11 @@ internal abstract class AzureDevOpsCommandBase : CommandBase
 		return null;
 	}
 
+	/// <summary>
+	/// Resolves an Azure DevOps identity by name.
+	/// </summary>
+	/// <param name="name">The identity name to search for.</param>
+	/// <returns>The resolved identity ID, or <see langword="null"/> if no single match was found.</returns>
 	protected async Task<string?> LookupIdentityAsync(string name)
 	{
 		HttpRequestMessage request = new(HttpMethod.Get, $"https://vssps.dev.azure.com/{this.Account}/_apis/identities?searchFilter=General&filterValue={Uri.EscapeDataString(name)}&queryMembership=None&api-version=6.0");

@@ -3,12 +3,23 @@
 
 namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 
-internal abstract class PullRequestCommandBase : RepoCommandBase
+/// <summary>
+/// Base type for Azure DevOps pull request commands.
+/// </summary>
+public abstract class PullRequestCommandBase : RepoCommandBase
 {
+	/// <summary>
+	/// Initializes a new instance of the <see cref="PullRequestCommandBase"/> class.
+	/// </summary>
 	protected PullRequestCommandBase()
 	{
 	}
 
+	/// <summary>
+	/// Initializes a new instance of the <see cref="PullRequestCommandBase"/> class from parsed command-line data.
+	/// </summary>
+	/// <param name="parseResult">The parsed command-line result.</param>
+	/// <param name="cancellationToken">The cancellation token.</param>
 	[SetsRequiredMembers]
 	protected PullRequestCommandBase(ParseResult parseResult, CancellationToken cancellationToken = default)
 		: base(parseResult, cancellationToken)
@@ -33,6 +44,10 @@ internal abstract class PullRequestCommandBase : RepoCommandBase
 		return command;
 	}
 
+	/// <summary>
+	/// Creates the HTTP client used for pull request Azure DevOps requests.
+	/// </summary>
+	/// <returns>The HTTP client.</returns>
 	protected override HttpClient CreateHttpClient()
 	{
 		HttpClient client = base.CreateHttpClient();

@@ -6,7 +6,7 @@ namespace Nerdbank.DotNetRepoTools.AzureDevOps;
 /// <summary>
 /// The output format for Azure DevOps commands that support text and JSON output.
 /// </summary>
-internal enum OutputFormat
+public enum OutputFormat
 {
 	/// <summary>
 	/// Human-readable text output (default).
