@@ -6,9 +6,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Microsoft.Build.Graph;
-using Microsoft.VisualStudio.SolutionPersistence;
-using Microsoft.VisualStudio.SolutionPersistence.Model;
-using Microsoft.VisualStudio.SolutionPersistence.Serializer;
 
 namespace Nerdbank.DotNetRepoTools;
 
@@ -63,13 +60,6 @@ public class GraphCommand : MSBuildCommandBase
 		/// Writes the graph as a Mermaid flowchart.
 		/// </summary>
 		Mermaid,
-	}
-
-	private enum InputKind
-	{
-		Project,
-		Sln,
-		Slnx,
 	}
 
 	/// <summary>
@@ -180,7 +170,7 @@ public class GraphCommand : MSBuildCommandBase
 		}
 
 		string extension = Path.GetExtension(fullInputPath);
-		if (!IsSupportedInput(extension))
+		if (!ProjectGraphInputLoader.IsSupportedInput(extension))
 		{
 			this.Error.WriteLine($"Unsupported input type '{extension}'. Expected a project file, .sln, or .slnx.");
 			this.ExitCode = 1;
@@ -198,7 +188,7 @@ public class GraphCommand : MSBuildCommandBase
 
 		try
 		{
-			GraphInput graphInput = await LoadGraphInputAsync(fullInputPath, excludedProjectPathPatterns, this.CancellationToken);
+			ProjectGraphInputLoader.GraphInput graphInput = await ProjectGraphInputLoader.LoadAsync(fullInputPath, projectPath => IsExcludedProjectPath(projectPath, excludedProjectPathPatterns), this.CancellationToken);
 			GraphModel graphModel = graphInput.EntryPoints.Count > 0
 				? BuildGraphModel(new ProjectGraph(graphInput.EntryPoints), graphInput.ExplicitSolutionProjects, excludedProjectPathPatterns, groupingPaths, highlightRules, fullInputPath, graphInput.InputKind, emittedPathBaseDirectory)
 				: new GraphModel([], [], []);
@@ -214,11 +204,6 @@ public class GraphCommand : MSBuildCommandBase
 		}
 	}
 
-	private static bool IsSupportedInput(string extension)
-		=> extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
-		|| extension.Equals(".sln", StringComparison.OrdinalIgnoreCase)
-		|| extension.EndsWith("proj", StringComparison.OrdinalIgnoreCase);
-
 	private static string FormatException(Exception exception)
 	{
 		List<string> messages = [];
@@ -230,43 +215,7 @@ public class GraphCommand : MSBuildCommandBase
 		return string.Join(Environment.NewLine + "Caused by: ", messages);
 	}
 
-	private static async Task<GraphInput> LoadGraphInputAsync(string inputPath, IReadOnlyList<Regex> excludedProjectPathPatterns, CancellationToken cancellationToken)
-	{
-		string extension = Path.GetExtension(inputPath);
-		if (!extension.Equals(".sln", StringComparison.OrdinalIgnoreCase)
-			&& !extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase))
-		{
-			return new GraphInput(
-			InputKind.Project,
-			IsExcludedProjectPath(inputPath, excludedProjectPathPatterns) ? [] : [new ProjectGraphEntryPoint(inputPath)],
-			new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-		}
-
-		ISolutionSerializer serializer = SolutionSerializers.GetSerializerByMoniker(inputPath) ?? throw new InvalidOperationException($"No solution serializer is available for '{inputPath}'.");
-		SolutionModel solutionModel = await serializer.OpenAsync(inputPath, cancellationToken);
-		string solutionDirectory = Path.GetDirectoryName(inputPath)!;
-
-		HashSet<string> explicitProjects = new(StringComparer.OrdinalIgnoreCase);
-		List<ProjectGraphEntryPoint> entryPoints = [];
-		foreach (SolutionProjectModel solutionProject in solutionModel.SolutionProjects)
-		{
-			string projectPath = NormalizePathRelativeTo(solutionDirectory, solutionProject.FilePath);
-			if (IsExcludedProjectPath(projectPath, excludedProjectPathPatterns))
-			{
-				continue;
-			}
-
-			explicitProjects.Add(projectPath);
-			entryPoints.Add(new ProjectGraphEntryPoint(projectPath));
-		}
-
-		return new GraphInput(
-			extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase) ? InputKind.Slnx : InputKind.Sln,
-			entryPoints,
-			explicitProjects);
-	}
-
-	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlyList<Regex> excludedProjectPathPatterns, IReadOnlySet<string> groupingPaths, IReadOnlyList<ProjectHighlightRuleModel> highlightRules, string inputPath, InputKind inputKind, string emittedPathBaseDirectory)
+	private static GraphModel BuildGraphModel(ProjectGraph projectGraph, HashSet<string> explicitSolutionProjects, IReadOnlyList<Regex> excludedProjectPathPatterns, IReadOnlySet<string> groupingPaths, IReadOnlyList<ProjectHighlightRuleModel> highlightRules, string inputPath, ProjectGraphInputLoader.InputKind inputKind, string emittedPathBaseDirectory)
 	{
 		Dictionary<string, GraphNodeModel> projectNodesByPath = new(StringComparer.OrdinalIgnoreCase);
 		List<GraphNodeModel> containerNodes = [];
@@ -301,7 +250,7 @@ public class GraphCommand : MSBuildCommandBase
 		{
 			AddGroupingContainers(groupingPaths, projectNodesByPath.Values, groupingContainerNodesByPath, containerNodes, edges, edgeKeys, emittedPathBaseDirectory);
 		}
-		else if (inputKind == InputKind.Slnx && projectNodesByPath.Values.Any(node => node.IsExplicitSolutionProject))
+		else if (inputKind == ProjectGraphInputLoader.InputKind.Slnx && projectNodesByPath.Values.Any(node => node.IsExplicitSolutionProject))
 		{
 			AddSlnxExplicitProjectsContainer(inputPath, projectNodesByPath.Values.Where(node => node.IsExplicitSolutionProject), containerNodes, edges, edgeKeys);
 		}
@@ -984,22 +933,6 @@ public class GraphCommand : MSBuildCommandBase
 
 	private static string GetPathRelativeTo(string baseDirectory, string path)
 		=> Path.TrimEndingDirectorySeparator(Path.GetRelativePath(baseDirectory, path));
-
-	private sealed class GraphInput
-	{
-		public GraphInput(InputKind inputKind, IReadOnlyList<ProjectGraphEntryPoint> entryPoints, HashSet<string> explicitSolutionProjects)
-		{
-			this.InputKind = inputKind;
-			this.EntryPoints = entryPoints;
-			this.ExplicitSolutionProjects = explicitSolutionProjects;
-		}
-
-		public InputKind InputKind { get; }
-
-		public IReadOnlyList<ProjectGraphEntryPoint> EntryPoints { get; }
-
-		public HashSet<string> ExplicitSolutionProjects { get; }
-	}
 
 	private sealed class GraphModel
 	{
