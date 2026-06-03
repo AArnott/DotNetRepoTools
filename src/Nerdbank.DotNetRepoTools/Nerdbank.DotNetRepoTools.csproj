@@ -8,6 +8,7 @@
     <ToolCommandName>repo</ToolCommandName>
     <PackAsTool>True</PackAsTool>
     <Description>A CLI tool with commands to help maintain .NET codebases.</Description>
+    <NoWarn>$(NoWarn);NU1901</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Azure.Identity" />

@@ -28,6 +28,9 @@ namespace Nerdbank.DotNetRepoTools;
 [JsonSerializable(typeof(AzDOArray<GitCommitRef>))]
 [JsonSerializable(typeof(PackingProjectsCommand.PackingProjectInfo))]
 [JsonSerializable(typeof(PackingProjectsCommand.PackingProjectInfo[]))]
+[JsonSerializable(typeof(PackingProjectsCommand.ProjectEvaluationFailure))]
+[JsonSerializable(typeof(PackingProjectsCommand.ProjectEvaluationFailure[]))]
+[JsonSerializable(typeof(PackingProjectsCommand.PackingProjectsOutput))]
 [JsonSerializable(typeof(JsonNode))]
 [JsonSerializable(typeof(List<JsonPatch>))]
 internal partial class SourceGenerationContext : JsonSerializerContext

@@ -68,15 +68,18 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 
 		Assert.Equal(0, this.Command.ExitCode);
 		using JsonDocument json = JsonDocument.Parse(((StringWriter)this.Command.Out).ToString());
-		Assert.Equal(4, json.RootElement.GetArrayLength());
-		Assert.Equal("App", json.RootElement[0].GetProperty("packageId").GetString());
-		Assert.Equal(Path.Combine("src", "App", "App.csproj"), json.RootElement[0].GetProperty("projectPath").GetString());
-		Assert.Equal("Contoso.Legacy", json.RootElement[1].GetProperty("packageId").GetString());
-		Assert.Equal(Path.Combine("packaging", "Legacy", "Legacy.nuproj"), json.RootElement[1].GetProperty("projectPath").GetString());
-		Assert.Equal("Contoso.Multi", json.RootElement[2].GetProperty("packageId").GetString());
-		Assert.Equal(Path.Combine("src", "Multi", "Multi.csproj"), json.RootElement[2].GetProperty("projectPath").GetString());
-		Assert.Equal("Contoso.Packed", json.RootElement[3].GetProperty("packageId").GetString());
-		Assert.Equal(Path.Combine("src", "Packed", "Packed.csproj"), json.RootElement[3].GetProperty("projectPath").GetString());
+		JsonElement packingProjects = json.RootElement.GetProperty("packingProjects");
+		JsonElement failedProjects = json.RootElement.GetProperty("failedProjects");
+		Assert.Equal(4, packingProjects.GetArrayLength());
+		Assert.Equal(0, failedProjects.GetArrayLength());
+		Assert.Equal("App", packingProjects[0].GetProperty("packageId").GetString());
+		Assert.Equal(Path.Combine("src", "App", "App.csproj"), packingProjects[0].GetProperty("projectPath").GetString());
+		Assert.Equal("Contoso.Legacy", packingProjects[1].GetProperty("packageId").GetString());
+		Assert.Equal(Path.Combine("packaging", "Legacy", "Legacy.nuproj"), packingProjects[1].GetProperty("projectPath").GetString());
+		Assert.Equal("Contoso.Multi", packingProjects[2].GetProperty("packageId").GetString());
+		Assert.Equal(Path.Combine("src", "Multi", "Multi.csproj"), packingProjects[2].GetProperty("projectPath").GetString());
+		Assert.Equal("Contoso.Packed", packingProjects[3].GetProperty("packageId").GetString());
+		Assert.Equal(Path.Combine("src", "Packed", "Packed.csproj"), packingProjects[3].GetProperty("projectPath").GetString());
 	}
 
 	[Fact]
