@@ -38,6 +38,15 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 	}
 
 	[Fact]
+	public void CreateCommand_DefinesOutputPathOptionAlias()
+	{
+		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
+		Option outputPathOption = Assert.Single(command.Options, option => option.Name == "--output-path");
+		Assert.Contains("-o", outputPathOption.Aliases);
+	}
+
+	[Fact]
 	public async Task ListsPackingProjectsForProjectInput()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -90,6 +99,67 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.Equal("Contoso.Packed", packingProjects[3].GetProperty("packageId").GetString());
 		Assert.Equal(Path.Combine("src", "Packed", "Packed.csproj"), packingProjects[3].GetProperty("projectPath").GetString());
 		Assert.Equal(0, json.RootElement.GetProperty("builtPackageConsumers").GetArrayLength());
+	}
+
+	[Fact]
+	public async Task WritesTextToOutputFileWhenOutputPathSpecified()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		string outputPath = Path.Combine(this.StagingDirectory, "packing-projects.txt");
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+			OutputPath = outputPath,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		Assert.Equal(string.Empty, ((StringWriter)this.Command.Out).ToString());
+		string fileOutput = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		Assert.Contains($"App: {Path.Combine("src", "App", "App.csproj")}", fileOutput);
+		Assert.Contains($"Contoso.Packed: {Path.Combine("src", "Packed", "Packed.csproj")}", fileOutput);
+	}
+
+	[Fact]
+	public async Task InfersJsonFormatFromOutputPathWhenFormatOmitted()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		string outputPath = Path.Combine(this.StagingDirectory, "packing-projects.json");
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+			OutputPath = outputPath,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		Assert.Equal(string.Empty, ((StringWriter)this.Command.Out).ToString());
+		using JsonDocument json = JsonDocument.Parse(await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken));
+		Assert.Equal(4, json.RootElement.GetProperty("packingProjects").GetArrayLength());
+	}
+
+	[Fact]
+	public async Task UsesTextFormatForNonJsonOutputPathWhenFormatOmitted()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		string outputPath = Path.Combine(this.StagingDirectory, "packing-projects.out");
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+			OutputPath = outputPath,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		string output = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		Assert.Contains($"App: {Path.Combine("src", "App", "App.csproj")}", output);
+		Assert.DoesNotContain("\"packingProjects\"", output);
 	}
 
 	[Fact]

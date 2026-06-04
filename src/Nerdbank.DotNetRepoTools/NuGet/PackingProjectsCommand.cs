@@ -25,6 +25,11 @@ public class PackingProjectsCommand : MSBuildCommandBase
 		Description = "The output format. Defaults to text.",
 	};
 
+	private static readonly Option<string> OutputPathOption = new("--output-path", "-o")
+	{
+		Description = "The file path to write output to instead of standard output.",
+	};
+
 	private static readonly Option<bool> FindConsumersOption = new("--find-consumers", "-c")
 	{
 		Description = "Finds package consumers for packages built in the graph and includes them in the output.",
@@ -47,6 +52,10 @@ public class PackingProjectsCommand : MSBuildCommandBase
 	{
 		this.InputPath = parseResult.GetValue(InputArgument)!;
 		this.Format = parseResult.GetValue(FormatOption);
+		this.IsFormatSpecified = parseResult.CommandResult.Children
+			.OfType<System.CommandLine.Parsing.OptionResult>()
+			.Any(optionResult => ReferenceEquals(optionResult.Option, FormatOption));
+		this.OutputPath = parseResult.GetValue(OutputPathOption);
 		this.FindConsumers = parseResult.GetValue(FindConsumersOption);
 	}
 
@@ -61,9 +70,19 @@ public class PackingProjectsCommand : MSBuildCommandBase
 	public PackingProjectsOutputFormat Format { get; init; }
 
 	/// <summary>
+	/// Gets the output file path.
+	/// </summary>
+	public string? OutputPath { get; init; }
+
+	/// <summary>
 	/// Gets a value indicating whether package consumers should be discovered.
 	/// </summary>
 	public bool FindConsumers { get; init; }
+
+	/// <summary>
+	/// Gets a value indicating whether the output format was explicitly specified.
+	/// </summary>
+	internal bool IsFormatSpecified { get; init; }
 
 	/// <summary>
 	/// Creates the command.
@@ -75,6 +94,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 		{
 			InputArgument,
 			FormatOption,
+			OutputPathOption,
 			FindConsumersOption,
 		};
 		command.SetAction(async (parseResult, cancellationToken) =>
@@ -105,10 +125,13 @@ public class PackingProjectsCommand : MSBuildCommandBase
 			return;
 		}
 
+		PackingProjectsOutputFormat format = this.GetEffectiveFormat();
+		using TextWriter outputWriter = this.CreateOutputWriter();
+
 		ProjectGraphInput graphInput = await ProjectGraphInputLoader.LoadAsync(fullInputPath, static _ => false, this.CancellationToken);
 		if (graphInput.EntryPoints.Count == 0)
 		{
-			this.WritePackingProjects([], new ConcurrentDictionary<string, string>(), []);
+			this.WritePackingProjects([], new ConcurrentDictionary<string, string>(), [], format, outputWriter);
 			return;
 		}
 
@@ -165,7 +188,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 		IReadOnlyList<BuiltPackageConsumerInfo> builtPackageConsumers = this.FindConsumers
 			? FindBuiltPackageConsumers(packingProjects, consumedPackagesById, displayPathBaseDirectory)
 			: [];
-		this.WritePackingProjects(packingProjects, failedProjects, builtPackageConsumers);
+		this.WritePackingProjects(packingProjects, failedProjects, builtPackageConsumers, format, outputWriter);
 	}
 
 	private static void CollectConsumedPackages(
@@ -316,10 +339,44 @@ public class PackingProjectsCommand : MSBuildCommandBase
 	private static string GetPathRelativeTo(string baseDirectory, string path)
 		=> Path.TrimEndingDirectorySeparator(Path.GetRelativePath(baseDirectory, path));
 
+	private PackingProjectsOutputFormat GetEffectiveFormat()
+	{
+		if (this.IsFormatSpecified || this.Format == PackingProjectsOutputFormat.Json)
+		{
+			return this.Format;
+		}
+
+		if (this.OutputPath is not null && Path.GetExtension(this.OutputPath).Equals(".json", StringComparison.OrdinalIgnoreCase))
+		{
+			return PackingProjectsOutputFormat.Json;
+		}
+
+		return PackingProjectsOutputFormat.Text;
+	}
+
+	private TextWriter CreateOutputWriter()
+	{
+		if (string.IsNullOrWhiteSpace(this.OutputPath))
+		{
+			return this.Out;
+		}
+
+		string fullOutputPath = Path.GetFullPath(this.OutputPath);
+		string? outputDirectory = Path.GetDirectoryName(fullOutputPath);
+		if (!string.IsNullOrWhiteSpace(outputDirectory))
+		{
+			Directory.CreateDirectory(outputDirectory);
+		}
+
+		return new StreamWriter(fullOutputPath, append: false);
+	}
+
 	private void WritePackingProjects(
 		IReadOnlyList<PackingProjectInfo> packingProjects,
 		ConcurrentDictionary<string, string> failedProjects,
-		IReadOnlyList<BuiltPackageConsumerInfo> builtPackageConsumers)
+		IReadOnlyList<BuiltPackageConsumerInfo> builtPackageConsumers,
+		PackingProjectsOutputFormat format,
+		TextWriter output)
 	{
 		IReadOnlyList<ProjectEvaluationFailure> failures = failedProjects
 			.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
@@ -331,10 +388,10 @@ public class PackingProjectsCommand : MSBuildCommandBase
 			this.ExitCode = 1;
 		}
 
-		if (this.Format == PackingProjectsOutputFormat.Json)
+		if (format == PackingProjectsOutputFormat.Json)
 		{
-			PackingProjectsOutput output = new(packingProjects.ToArray(), failures.ToArray(), builtPackageConsumers.ToArray());
-			this.Out.WriteLine(JsonSerializer.Serialize(output, SourceGenerationContext.Default.PackingProjectsOutput));
+			PackingProjectsOutput jsonOutput = new(packingProjects.ToArray(), failures.ToArray(), builtPackageConsumers.ToArray());
+			output.WriteLine(JsonSerializer.Serialize(jsonOutput, SourceGenerationContext.Default.PackingProjectsOutput));
 			return;
 		}
 
@@ -352,31 +409,31 @@ public class PackingProjectsCommand : MSBuildCommandBase
 
 		if (packingProjects.Count == 0)
 		{
-			this.Out.WriteLine("No packing projects found.");
+			output.WriteLine("No packing projects found.");
 			return;
 		}
 
 		foreach (PackingProjectInfo packingProject in packingProjects)
 		{
-			this.Out.WriteLine($"{packingProject.PackageId}: {packingProject.ProjectPath}");
+			output.WriteLine($"{packingProject.PackageId}: {packingProject.ProjectPath}");
 		}
 
 		if (this.FindConsumers)
 		{
-			this.Out.WriteLine();
+			output.WriteLine();
 			if (builtPackageConsumers.Count == 0)
 			{
-				this.Out.WriteLine("No built package IDs were consumed by projects in the graph.");
+				output.WriteLine("No built package IDs were consumed by projects in the graph.");
 			}
 			else
 			{
-				this.Out.WriteLine("Consumers of built package IDs:");
+				output.WriteLine("Consumers of built package IDs:");
 				foreach (BuiltPackageConsumerInfo consumerInfo in builtPackageConsumers)
 				{
-					this.Out.WriteLine($"{consumerInfo.PackageId}:");
+					output.WriteLine($"{consumerInfo.PackageId}:");
 					foreach (string projectPath in consumerInfo.ConsumerProjectPaths)
 					{
-						this.Out.WriteLine($"  {projectPath}");
+						output.WriteLine($"  {projectPath}");
 					}
 				}
 			}
