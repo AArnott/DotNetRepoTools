@@ -468,7 +468,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 	/// Describes projects that consume a package built within the project graph.
 	/// </summary>
 	/// <param name="PackageId">The built package ID that is consumed.</param>
-	/// <param name="ConsumerProjectPaths">The project file paths that define references to the package.</param>
+	/// <param name="ConsumerProjectPaths">The files (project or imported files) that define references to the package.</param>
 	internal sealed record BuiltPackageConsumerInfo(string PackageId, string[] ConsumerProjectPaths);
 
 	/// <summary>

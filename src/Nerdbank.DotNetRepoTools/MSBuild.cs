@@ -249,13 +249,13 @@ public class MSBuild : IDisposable
 				continue;
 			}
 
-			properties["RoslynToolsPath"] = roslynToolsPath;
-			properties["CSharpCoreTargetsPath"] = Path.Combine(roslynToolsPath, "Microsoft.CSharp.Core.targets");
+			properties.TryAdd("RoslynToolsPath", roslynToolsPath);
+			properties.TryAdd("CSharpCoreTargetsPath", Path.Combine(roslynToolsPath, "Microsoft.CSharp.Core.targets"));
 
 			string visualBasicCoreTargetsPath = Path.Combine(roslynToolsPath, "Microsoft.VisualBasic.Core.targets");
 			if (File.Exists(visualBasicCoreTargetsPath))
 			{
-				properties["VisualBasicCoreTargetsPath"] = visualBasicCoreTargetsPath;
+				properties.TryAdd("VisualBasicCoreTargetsPath", visualBasicCoreTargetsPath);
 			}
 
 			return;
