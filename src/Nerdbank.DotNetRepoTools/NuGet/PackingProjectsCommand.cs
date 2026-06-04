@@ -146,12 +146,12 @@ public class PackingProjectsCommand : MSBuildCommandBase
 		{
 			projectGraph = new(
 				graphInput.EntryPoints,
-				ProjectCollection.GlobalProjectCollection,
+				this.MSBuild.ProjectCollection,
 				(path, properties, collection) =>
 				{
 					try
 					{
-						ProjectInstance instance = ProjectInstance.FromFile(path, new ProjectOptions { GlobalProperties = properties });
+						ProjectInstance instance = ProjectInstance.FromFile(path, new ProjectOptions { GlobalProperties = properties, ProjectCollection = collection });
 						if (this.FindConsumers)
 						{
 							CollectConsumedPackages(instance, consumedPackagesById);
