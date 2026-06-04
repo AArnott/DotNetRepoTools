@@ -163,6 +163,24 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 	}
 
 	[Fact]
+	public async Task LeavesStdOutUsableWhenOutputPathIsNotSpecified()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		StringWriter stdOutWriter = (StringWriter)this.Command.Out;
+		stdOutWriter.Write("tail");
+		Assert.EndsWith("tail", stdOutWriter.ToString(), StringComparison.Ordinal);
+	}
+
+	[Fact]
 	public async Task ListsConsumersOfBuiltPackagesWhenRequested()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");

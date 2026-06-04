@@ -126,69 +126,78 @@ public class PackingProjectsCommand : MSBuildCommandBase
 		}
 
 		PackingProjectsOutputFormat format = this.GetEffectiveFormat();
-		using TextWriter outputWriter = this.CreateOutputWriter();
-
-		ProjectGraphInput graphInput = await ProjectGraphInputLoader.LoadAsync(fullInputPath, static _ => false, this.CancellationToken);
-		if (graphInput.EntryPoints.Count == 0)
-		{
-			this.WritePackingProjects([], new ConcurrentDictionary<string, string>(), [], format, outputWriter);
-			return;
-		}
-
-		ConcurrentDictionary<string, string> failedProjects = new(StringComparer.OrdinalIgnoreCase);
-		ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> consumedPackagesById = new(StringComparer.OrdinalIgnoreCase);
-		List<ProjectInstance> evaluatedProjects = [];
-
-		// Use ProjectGraph to expand traversal projects (like dirs.proj) into their referenced projects.
-		// The factory function captures failures for individual projects while allowing successful projects to continue.
-		ProjectGraph? projectGraph = null;
+		TextWriter outputWriter = this.CreateOutputWriter();
 		try
 		{
-			projectGraph = new(
-				graphInput.EntryPoints,
-				this.MSBuild.ProjectCollection,
-				(path, properties, collection) =>
-				{
-					try
+			ProjectGraphInput graphInput = await ProjectGraphInputLoader.LoadAsync(fullInputPath, static _ => false, this.CancellationToken);
+			if (graphInput.EntryPoints.Count == 0)
+			{
+				this.WritePackingProjects([], new ConcurrentDictionary<string, string>(), [], format, outputWriter);
+				return;
+			}
+
+			ConcurrentDictionary<string, string> failedProjects = new(StringComparer.OrdinalIgnoreCase);
+			ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> consumedPackagesById = new(StringComparer.OrdinalIgnoreCase);
+			List<ProjectInstance> evaluatedProjects = [];
+
+			// Use ProjectGraph to expand traversal projects (like dirs.proj) into their referenced projects.
+			// The factory function captures failures for individual projects while allowing successful projects to continue.
+			ProjectGraph? projectGraph = null;
+			try
+			{
+				projectGraph = new(
+					graphInput.EntryPoints,
+					this.MSBuild.ProjectCollection,
+					(path, properties, collection) =>
 					{
-						ProjectInstance instance = ProjectInstance.FromFile(path, new ProjectOptions { GlobalProperties = properties, ProjectCollection = collection });
-						if (this.FindConsumers)
+						try
 						{
-							CollectConsumedPackages(instance, consumedPackagesById);
-						}
+							ProjectInstance instance = ProjectInstance.FromFile(path, new ProjectOptions { GlobalProperties = properties, ProjectCollection = collection });
+							if (this.FindConsumers)
+							{
+								CollectConsumedPackages(instance, consumedPackagesById);
+							}
 
-						lock (evaluatedProjects)
+							lock (evaluatedProjects)
+							{
+								evaluatedProjects.Add(instance);
+							}
+
+							return instance;
+						}
+						catch (Exception ex)
 						{
-							evaluatedProjects.Add(instance);
+							failedProjects.TryAdd(path, ex.Message);
+
+							// Return a minimal project instance to allow graph construction to continue.
+							// This project won't be packable, so it will be filtered out later.
+							return CreateMinimalProjectInstance(path, properties);
 						}
+					});
+			}
+			catch (Exception)
+			{
+				// Graph construction failed. We've captured what we could via the factory function.
+			}
 
-						return instance;
-					}
-					catch (Exception ex)
-					{
-						failedProjects.TryAdd(path, ex.Message);
+			// Prefer extracting from the graph itself when available (more complete), else use factory-captured instances.
+			IReadOnlyList<ProjectInstance> projectsToAnalyze = projectGraph?.ProjectNodes.Select(n => n.ProjectInstance).ToList()
+				?? (IReadOnlyList<ProjectInstance>)evaluatedProjects;
 
-						// Return a minimal project instance to allow graph construction to continue.
-						// This project won't be packable, so it will be filtered out later.
-						return CreateMinimalProjectInstance(path, properties);
-					}
-				});
+			string displayPathBaseDirectory = ResolveDisplayPathBaseDirectory(fullInputPath);
+			IReadOnlyList<PackingProjectInfo> packingProjects = FindPackingProjects(projectsToAnalyze, displayPathBaseDirectory);
+			IReadOnlyList<BuiltPackageConsumerInfo> builtPackageConsumers = this.FindConsumers
+				? FindBuiltPackageConsumers(packingProjects, consumedPackagesById, displayPathBaseDirectory)
+				: [];
+			this.WritePackingProjects(packingProjects, failedProjects, builtPackageConsumers, format, outputWriter);
 		}
-		catch (Exception)
+		finally
 		{
-			// Graph construction failed. We've captured what we could via the factory function.
+			if (!ReferenceEquals(outputWriter, this.Out))
+			{
+				outputWriter.Dispose();
+			}
 		}
-
-		// Prefer extracting from the graph itself when available (more complete), else use factory-captured instances.
-		IReadOnlyList<ProjectInstance> projectsToAnalyze = projectGraph?.ProjectNodes.Select(n => n.ProjectInstance).ToList()
-			?? (IReadOnlyList<ProjectInstance>)evaluatedProjects;
-
-		string displayPathBaseDirectory = ResolveDisplayPathBaseDirectory(fullInputPath);
-		IReadOnlyList<PackingProjectInfo> packingProjects = FindPackingProjects(projectsToAnalyze, displayPathBaseDirectory);
-		IReadOnlyList<BuiltPackageConsumerInfo> builtPackageConsumers = this.FindConsumers
-			? FindBuiltPackageConsumers(packingProjects, consumedPackagesById, displayPathBaseDirectory)
-			: [];
-		this.WritePackingProjects(packingProjects, failedProjects, builtPackageConsumers, format, outputWriter);
 	}
 
 	private static void CollectConsumedPackages(
