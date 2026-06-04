@@ -150,9 +150,10 @@ public class PackingProjectsCommand : MSBuildCommandBase
 					this.MSBuild.ProjectCollection,
 					(path, properties, collection) =>
 					{
+						Dictionary<string, string> effectiveProperties = this.MSBuild.CreateEvaluationProperties(properties);
 						try
 						{
-							ProjectInstance instance = ProjectInstance.FromFile(path, new ProjectOptions { GlobalProperties = properties, ProjectCollection = collection });
+							ProjectInstance instance = ProjectInstance.FromFile(path, new ProjectOptions { GlobalProperties = effectiveProperties, ProjectCollection = collection });
 							if (this.FindConsumers)
 							{
 								CollectConsumedPackages(instance, consumedPackagesById);
@@ -171,7 +172,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 
 							// Return a minimal project instance to allow graph construction to continue.
 							// This project won't be packable, so it will be filtered out later.
-							return CreateMinimalProjectInstance(path, properties);
+							return CreateMinimalProjectInstance(path, effectiveProperties);
 						}
 					});
 			}
