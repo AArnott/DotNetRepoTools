@@ -29,6 +29,24 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 	}
 
 	[Fact]
+	public void CreateCommand_DefinesFindConsumersOptionAlias()
+	{
+		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
+		Option findConsumersOption = Assert.Single(command.Options, option => option.Name == "--find-consumers");
+		Assert.Contains("-c", findConsumersOption.Aliases);
+	}
+
+	[Fact]
+	public void CreateCommand_DefinesOutputPathOptionAlias()
+	{
+		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
+		Option outputPathOption = Assert.Single(command.Options, option => option.Name == "--output-path");
+		Assert.Contains("-o", outputPathOption.Aliases);
+	}
+
+	[Fact]
 	public async Task ListsPackingProjectsForProjectInput()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -80,6 +98,207 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.Equal(Path.Combine("src", "Multi", "Multi.csproj"), packingProjects[2].GetProperty("projectPath").GetString());
 		Assert.Equal("Contoso.Packed", packingProjects[3].GetProperty("packageId").GetString());
 		Assert.Equal(Path.Combine("src", "Packed", "Packed.csproj"), packingProjects[3].GetProperty("projectPath").GetString());
+		Assert.Equal(0, json.RootElement.GetProperty("builtPackageConsumers").GetArrayLength());
+	}
+
+	[Fact]
+	public async Task WritesTextToOutputFileWhenOutputPathSpecified()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		string outputPath = Path.Combine(this.StagingDirectory, "packing-projects.txt");
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+			OutputPath = outputPath,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		Assert.Equal(string.Empty, ((StringWriter)this.Command.Out).ToString());
+		string fileOutput = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		Assert.Contains($"App: {Path.Combine("src", "App", "App.csproj")}", fileOutput);
+		Assert.Contains($"Contoso.Packed: {Path.Combine("src", "Packed", "Packed.csproj")}", fileOutput);
+	}
+
+	[Fact]
+	public async Task InfersJsonFormatFromOutputPathWhenFormatOmitted()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		string outputPath = Path.Combine(this.StagingDirectory, "packing-projects.json");
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+			OutputPath = outputPath,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		Assert.Equal(string.Empty, ((StringWriter)this.Command.Out).ToString());
+		using JsonDocument json = JsonDocument.Parse(await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken));
+		Assert.Equal(4, json.RootElement.GetProperty("packingProjects").GetArrayLength());
+	}
+
+	[Fact]
+	public async Task UsesTextFormatForNonJsonOutputPathWhenFormatOmitted()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		string outputPath = Path.Combine(this.StagingDirectory, "packing-projects.out");
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+			OutputPath = outputPath,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		string output = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		Assert.Contains($"App: {Path.Combine("src", "App", "App.csproj")}", output);
+		Assert.DoesNotContain("\"packingProjects\"", output);
+	}
+
+	[Fact]
+	public async Task LeavesStdOutUsableWhenOutputPathIsNotSpecified()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		StringWriter stdOutWriter = (StringWriter)this.Command.Out;
+		stdOutWriter.Write("tail");
+		Assert.EndsWith("tail", stdOutWriter.ToString(), StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task ListsConsumersOfBuiltPackagesWhenRequested()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		string rootProjectDirectory = Path.GetDirectoryName(rootProjectPath)!;
+		string importedItemsPath = Path.Combine(rootProjectDirectory, "ImportedPackages.props");
+		string importedItemsContent = string.Join(
+			Environment.NewLine,
+			[
+				"<Project>",
+				"  <ItemGroup>",
+				"    <PackageReference Include=\"Contoso.Packed\" Version=\"1.0.0\" />",
+				"    <PackageVersion Include=\"Contoso.Multi\" Version=\"1.0.0\" />",
+				"  </ItemGroup>",
+				"</Project>",
+			]);
+		await File.WriteAllTextAsync(
+			importedItemsPath,
+			importedItemsContent,
+			TestContext.Current.CancellationToken);
+		string rootProjectContent = string.Join(
+			Environment.NewLine,
+			[
+				"<Project Sdk=\"Microsoft.NET.Sdk\">",
+				"  <PropertyGroup>",
+				"    <TargetFramework>net8.0</TargetFramework>",
+				"  </PropertyGroup>",
+				$"  <Import Project=\"{Path.GetFileName(importedItemsPath)}\" />",
+				"  <ItemGroup>",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "Packed", "Packed.csproj")}\" />",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "Multi", "Multi.csproj")}\" />",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "..", "test", "DisabledPack", "DisabledPack.csproj")}\" />",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "..", "packaging", "Legacy", "Legacy.nuproj")}\" />",
+				"  </ItemGroup>",
+				"</Project>",
+			]);
+
+		await File.WriteAllTextAsync(
+			rootProjectPath,
+			rootProjectContent,
+			TestContext.Current.CancellationToken);
+
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+			FindConsumers = true,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		string output = ((StringWriter)this.Command.Out).ToString();
+		Assert.Contains("Consumers of built package IDs:", output);
+		Assert.Contains("Contoso.Multi:", output);
+		Assert.Contains("Contoso.Packed:", output);
+		Assert.Contains($"  {Path.Combine("src", "App", "ImportedPackages.props")}", output);
+	}
+
+	[Fact]
+	public async Task WritesJsonConsumersOfBuiltPackagesWhenRequested()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		string rootProjectDirectory = Path.GetDirectoryName(rootProjectPath)!;
+		string importedItemsPath = Path.Combine(rootProjectDirectory, "ImportedPackages.props");
+		string importedItemsContent = string.Join(
+			Environment.NewLine,
+			[
+				"<Project>",
+				"  <ItemGroup>",
+				"    <PackageVersion Include=\"Contoso.Legacy\" Version=\"1.0.0\" />",
+				"  </ItemGroup>",
+				"</Project>",
+			]);
+		await File.WriteAllTextAsync(
+			importedItemsPath,
+			importedItemsContent,
+			TestContext.Current.CancellationToken);
+		string rootProjectContent = string.Join(
+			Environment.NewLine,
+			[
+				"<Project Sdk=\"Microsoft.NET.Sdk\">",
+				"  <PropertyGroup>",
+				"    <TargetFramework>net8.0</TargetFramework>",
+				"  </PropertyGroup>",
+				$"  <Import Project=\"{Path.GetFileName(importedItemsPath)}\" />",
+				"  <ItemGroup>",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "Packed", "Packed.csproj")}\" />",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "Multi", "Multi.csproj")}\" />",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "..", "test", "DisabledPack", "DisabledPack.csproj")}\" />",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "..", "packaging", "Legacy", "Legacy.nuproj")}\" />",
+				"  </ItemGroup>",
+				"</Project>",
+			]);
+
+		await File.WriteAllTextAsync(
+			rootProjectPath,
+			rootProjectContent,
+			TestContext.Current.CancellationToken);
+
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+			Format = PackingProjectsOutputFormat.Json,
+			FindConsumers = true,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		using JsonDocument json = JsonDocument.Parse(((StringWriter)this.Command.Out).ToString());
+		JsonElement builtPackageConsumers = json.RootElement.GetProperty("builtPackageConsumers");
+		JsonElement legacyConsumer = Assert.Single(
+			builtPackageConsumers.EnumerateArray(),
+			element => element.GetProperty("packageId").GetString() == "Contoso.Legacy");
+		Assert.Equal(
+			Path.Combine("src", "App", "ImportedPackages.props"),
+			Assert.Single(legacyConsumer.GetProperty("consumerProjectPaths").EnumerateArray()).GetString());
 	}
 
 	[Fact]

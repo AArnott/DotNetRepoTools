@@ -72,7 +72,8 @@ public class MSBuild : IDisposable
 	/// <returns>The project.</returns>
 	public Project GetProject(string projectFile, ProjectLoadSettings projectLoadSettings = ProjectLoadSettings.Default)
 	{
-		return this.ProjectCollection.GetLoadedProjects(Path.GetFullPath(projectFile)).FirstOrDefault() ?? new Project(projectFile, null, null, this.ProjectCollection, projectLoadSettings);
+		return this.ProjectCollection.GetLoadedProjects(Path.GetFullPath(projectFile)).FirstOrDefault()
+			?? new Project(projectFile, this.CreateEvaluationProperties(), null, this.ProjectCollection, projectLoadSettings);
 	}
 
 	/// <summary>
@@ -121,6 +122,26 @@ public class MSBuild : IDisposable
 				pre.Reload(throwIfUnsavedChanges: false);
 			}
 		}
+	}
+
+	/// <summary>
+	/// Creates the effective global properties used to evaluate projects.
+	/// </summary>
+	/// <param name="projectSpecificProperties">Project-specific properties that should override collection-level defaults.</param>
+	/// <returns>The effective global properties for project evaluation.</returns>
+	internal Dictionary<string, string> CreateEvaluationProperties(IDictionary<string, string>? projectSpecificProperties = null)
+	{
+		Dictionary<string, string> effectiveProperties = new(this.ProjectCollection.GlobalProperties, StringComparer.OrdinalIgnoreCase);
+		if (projectSpecificProperties is not null)
+		{
+			foreach ((string key, string value) in projectSpecificProperties)
+			{
+				effectiveProperties[key] = value;
+			}
+		}
+
+		ApplyCompilerPathPropertyOverrides(effectiveProperties, this.ProjectCollection);
+		return effectiveProperties;
 	}
 
 	/// <summary>
@@ -179,6 +200,68 @@ public class MSBuild : IDisposable
 	[return: NotNullIfNotNull(nameof(path))]
 	private static string? EnsureTrailingSlash(string? path) => path is null || path.EndsWith(Path.DirectorySeparatorChar) ? path : path + Path.DirectorySeparatorChar;
 
+	private static void ApplyCompilerPathPropertyOverrides(IDictionary<string, string> properties, ProjectCollection collection)
+	{
+		List<string> candidateMsbuildPaths = [];
+		Toolset? currentToolset = collection.GetToolset("Current");
+		if (currentToolset is not null)
+		{
+			candidateMsbuildPaths.Add(currentToolset.ToolsPath);
+		}
+
+		Toolset? defaultToolset = collection.GetToolset(collection.DefaultToolsVersion);
+		if (defaultToolset is not null)
+		{
+			candidateMsbuildPaths.Add(defaultToolset.ToolsPath);
+		}
+
+		string? msbuildSdksPath = Environment.GetEnvironmentVariable("MSBuildSDKsPath");
+		if (!string.IsNullOrWhiteSpace(msbuildSdksPath))
+		{
+			string? sdkRoot = Path.GetDirectoryName(msbuildSdksPath);
+			if (!string.IsNullOrWhiteSpace(sdkRoot))
+			{
+				candidateMsbuildPaths.Add(sdkRoot);
+			}
+		}
+
+		foreach (string msbuildPath in candidateMsbuildPaths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
+		{
+			List<string> candidateRoslynPaths =
+			[
+				Path.Combine(msbuildPath, "Roslyn"),
+			];
+
+			string? parent = Path.GetDirectoryName(msbuildPath);
+			if (!string.IsNullOrEmpty(parent))
+			{
+				candidateRoslynPaths.Add(Path.Combine(parent, "Roslyn"));
+				string? grandParent = Path.GetDirectoryName(parent);
+				if (!string.IsNullOrEmpty(grandParent))
+				{
+					candidateRoslynPaths.Add(Path.Combine(grandParent, "Roslyn"));
+				}
+			}
+
+			string? roslynToolsPath = candidateRoslynPaths.FirstOrDefault(path => File.Exists(Path.Combine(path, "Microsoft.CSharp.Core.targets")));
+			if (roslynToolsPath is null)
+			{
+				continue;
+			}
+
+			properties.TryAdd("RoslynToolsPath", roslynToolsPath);
+			properties.TryAdd("CSharpCoreTargetsPath", Path.Combine(roslynToolsPath, "Microsoft.CSharp.Core.targets"));
+
+			string visualBasicCoreTargetsPath = Path.Combine(roslynToolsPath, "Microsoft.VisualBasic.Core.targets");
+			if (File.Exists(visualBasicCoreTargetsPath))
+			{
+				properties.TryAdd("VisualBasicCoreTargetsPath", visualBasicCoreTargetsPath);
+			}
+
+			return;
+		}
+	}
+
 	private IEnumerable<ProjectRootElement> EnumerateLoadedXml()
 	{
 		foreach (Project project in this.ProjectCollection.LoadedProjects)
@@ -201,7 +284,22 @@ public class MSBuild : IDisposable
 	{
 		static MSBuildLocator()
 		{
-			Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
+			if (Microsoft.Build.Locator.MSBuildLocator.IsRegistered)
+			{
+				return;
+			}
+
+			Microsoft.Build.Locator.VisualStudioInstance? vsInstance = Microsoft.Build.Locator.MSBuildLocator.QueryVisualStudioInstances()
+				.OrderByDescending(i => i.Version)
+				.FirstOrDefault();
+			if (vsInstance is not null)
+			{
+				Microsoft.Build.Locator.MSBuildLocator.RegisterInstance(vsInstance);
+			}
+			else
+			{
+				Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
+			}
 		}
 
 		/// <summary>
