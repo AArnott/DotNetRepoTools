@@ -113,7 +113,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 		if (!File.Exists(fullInputPath))
 		{
 			this.Error.WriteLine($"Input file not found: {fullInputPath}");
-			this.ExitCode = 1;
+			this.ExitCode = 10;
 			return;
 		}
 
@@ -121,7 +121,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 		if (!ProjectGraphInputLoader.IsSupportedInput(extension))
 		{
 			this.Error.WriteLine($"Unsupported input type '{extension}'. Expected a project file, .sln, or .slnx.");
-			this.ExitCode = 1;
+			this.ExitCode = 9;
 			return;
 		}
 
