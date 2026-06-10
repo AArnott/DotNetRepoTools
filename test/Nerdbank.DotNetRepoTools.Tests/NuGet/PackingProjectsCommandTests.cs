@@ -38,6 +38,27 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 	}
 
 	[Fact]
+	public void CreateCommand_DefinesFindTransitiveConsumersOption()
+	{
+		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
+		Assert.Single(command.Options, option => option.Name == "--find-transitive-consumers");
+	}
+
+	[Fact]
+	public void Constructor_EnablesFindConsumersWhenFindTransitiveConsumersSpecified()
+	{
+		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+		Command command = Assert.IsType<Command>(createCommandMethod.Invoke(obj: null, parameters: null));
+		ParseResult parseResult = command.Parse(["--find-transitive-consumers", "repo.csproj"]);
+
+		using PackingProjectsCommand packingProjectsCommand = new(parseResult, CancellationToken.None);
+
+		Assert.True(packingProjectsCommand.FindTransitiveConsumers);
+		Assert.True(packingProjectsCommand.FindConsumers);
+	}
+
+	[Fact]
 	public void CreateCommand_DefinesOutputPathOptionAlias()
 	{
 		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -222,6 +243,10 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 			rootProjectPath,
 			rootProjectContent,
 			TestContext.Current.CancellationToken);
+		await WriteProjectAssetsFileAsync(
+			rootProjectPath,
+			directPackageIds: ["Contoso.Packed"],
+			resolvedPackageIds: ["Contoso.Packed", "Contoso.Legacy"]);
 
 		this.Command = new()
 		{
@@ -236,7 +261,8 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.Contains("Consumers of built package IDs:", output);
 		Assert.Contains("Contoso.Multi:", output);
 		Assert.Contains("Contoso.Packed:", output);
-		Assert.Contains($"  {Path.Combine("src", "App", "ImportedPackages.props")}", output);
+		Assert.Contains($"  {Path.Combine("src", "App", "ImportedPackages.props")} (direct)", output);
+		Assert.DoesNotContain($"  {Path.Combine("src", "App", "App.csproj")} (transitive)", output);
 	}
 
 	[Fact]
@@ -280,6 +306,10 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 			rootProjectPath,
 			rootProjectContent,
 			TestContext.Current.CancellationToken);
+		await WriteProjectAssetsFileAsync(
+			rootProjectPath,
+			directPackageIds: [],
+			resolvedPackageIds: ["Contoso.Legacy"]);
 
 		this.Command = new()
 		{
@@ -296,9 +326,77 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		JsonElement legacyConsumer = Assert.Single(
 			builtPackageConsumers.EnumerateArray(),
 			element => element.GetProperty("packageId").GetString() == "Contoso.Legacy");
-		Assert.Equal(
-			Path.Combine("src", "App", "ImportedPackages.props"),
-			Assert.Single(legacyConsumer.GetProperty("consumerProjectPaths").EnumerateArray()).GetString());
+		JsonElement legacyConsumerEntry = Assert.Single(legacyConsumer.GetProperty("consumers").EnumerateArray());
+		Assert.Equal(Path.Combine("src", "App", "ImportedPackages.props"), legacyConsumerEntry.GetProperty("consumerProjectPath").GetString());
+		Assert.Equal("direct", legacyConsumerEntry.GetProperty("dependencyKind").GetString());
+	}
+
+	[Fact]
+	public async Task FindsTransitiveConsumersWhenRequested()
+	{
+		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
+		(string rootProjectPath, _, _, _, _) = await this.CreatePackingProjectGraphAsync(repoRoot);
+		string rootProjectDirectory = Path.GetDirectoryName(rootProjectPath)!;
+		string importedItemsPath = Path.Combine(rootProjectDirectory, "ImportedPackages.props");
+		string importedItemsContent = string.Join(
+			Environment.NewLine,
+			[
+				"<Project>",
+				"  <ItemGroup>",
+				"    <PackageVersion Include=\"Contoso.Legacy\" Version=\"1.0.0\" />",
+				"  </ItemGroup>",
+				"</Project>",
+			]);
+		await File.WriteAllTextAsync(
+			importedItemsPath,
+			importedItemsContent,
+			TestContext.Current.CancellationToken);
+		string rootProjectContent = string.Join(
+			Environment.NewLine,
+			[
+				"<Project Sdk=\"Microsoft.NET.Sdk\">",
+				"  <PropertyGroup>",
+				"    <TargetFramework>net8.0</TargetFramework>",
+				"  </PropertyGroup>",
+				$"  <Import Project=\"{Path.GetFileName(importedItemsPath)}\" />",
+				"  <ItemGroup>",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "Packed", "Packed.csproj")}\" />",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "Multi", "Multi.csproj")}\" />",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "..", "test", "DisabledPack", "DisabledPack.csproj")}\" />",
+				$"    <ProjectReference Include=\"{Path.Combine("..", "..", "packaging", "Legacy", "Legacy.nuproj")}\" />",
+				"  </ItemGroup>",
+				"</Project>",
+			]);
+
+		await File.WriteAllTextAsync(
+			rootProjectPath,
+			rootProjectContent,
+			TestContext.Current.CancellationToken);
+		await WriteProjectAssetsFileAsync(
+			rootProjectPath,
+			directPackageIds: [],
+			resolvedPackageIds: ["Contoso.Legacy"]);
+
+		this.Command = new()
+		{
+			InputPath = rootProjectPath,
+			Format = PackingProjectsOutputFormat.Json,
+			FindTransitiveConsumers = true,
+		};
+
+		await this.ExecuteCommandAsync();
+
+		Assert.Equal(0, this.Command.ExitCode);
+		using JsonDocument json = JsonDocument.Parse(((StringWriter)this.Command.Out).ToString());
+		JsonElement builtPackageConsumers = json.RootElement.GetProperty("builtPackageConsumers");
+		JsonElement legacyConsumerWithTransitive = Assert.Single(
+			builtPackageConsumers.EnumerateArray(),
+			element => element.GetProperty("packageId").GetString() == "Contoso.Legacy");
+		JsonElement legacyConsumerEntry = Assert.Single(
+			legacyConsumerWithTransitive.GetProperty("consumers").EnumerateArray(),
+			element => element.GetProperty("dependencyKind").GetString() == "transitive");
+		Assert.Equal(Path.Combine("src", "App", "App.csproj"), legacyConsumerEntry.GetProperty("consumerProjectPath").GetString());
+		Assert.Equal("transitive", legacyConsumerEntry.GetProperty("dependencyKind").GetString());
 	}
 
 	[Fact]
@@ -378,6 +476,41 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		}
 
 		await ((ISolutionSerializer)SolutionSerializers.SlnXml).SaveAsync(solutionPath, solutionModel, TestContext.Current.CancellationToken);
+	}
+
+	private static async Task WriteProjectAssetsFileAsync(string projectPath, string[] directPackageIds, string[] resolvedPackageIds)
+	{
+		string assetsFilePath = Path.Combine(Path.GetDirectoryName(projectPath)!, "obj", "project.assets.json");
+		Directory.CreateDirectory(Path.GetDirectoryName(assetsFilePath)!);
+
+		string assetsFileContent = JsonSerializer.Serialize(new
+		{
+			version = 3,
+			project = new
+			{
+				frameworks = new Dictionary<string, object?>
+				{
+					["net8.0"] = new
+					{
+						dependencies = directPackageIds.ToDictionary(
+							static packageId => packageId,
+							static _ => (object?)new { target = "Package", version = "[1.0.0, )" },
+							StringComparer.OrdinalIgnoreCase),
+					},
+				},
+			},
+			libraries = resolvedPackageIds.ToDictionary(
+				static packageId => $"{packageId}/1.0.0",
+				static packageId => (object?)new
+				{
+					type = "package",
+					path = $"{packageId.ToLowerInvariant()}/1.0.0",
+					files = Array.Empty<string>(),
+				},
+				StringComparer.OrdinalIgnoreCase),
+		});
+
+		await File.WriteAllTextAsync(assetsFilePath, assetsFileContent, TestContext.Current.CancellationToken);
 	}
 
 	private async Task<(string RootProjectPath, string PackedProjectPath, string MultiTargetProjectPath, string NuProjPath, string DisabledPackProjectPath)> CreatePackingProjectGraphAsync(string rootDirectory)

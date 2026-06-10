@@ -35,6 +35,11 @@ public class PackingProjectsCommand : MSBuildCommandBase
 		Description = "Finds package consumers for packages built in the graph and includes them in the output.",
 	};
 
+	private static readonly Option<bool> FindTransitiveConsumersOption = new("--find-transitive-consumers")
+	{
+		Description = "Searches project.assets.json files for transitive consumers. Implies --find-consumers.",
+	};
+
 	/// <summary>
 	/// Initializes a new instance of the <see cref="PackingProjectsCommand"/> class.
 	/// </summary>
@@ -56,7 +61,8 @@ public class PackingProjectsCommand : MSBuildCommandBase
 			.OfType<System.CommandLine.Parsing.OptionResult>()
 			.Any(optionResult => ReferenceEquals(optionResult.Option, FormatOption));
 		this.OutputPath = parseResult.GetValue(OutputPathOption);
-		this.FindConsumers = parseResult.GetValue(FindConsumersOption);
+		this.FindTransitiveConsumers = parseResult.GetValue(FindTransitiveConsumersOption);
+		this.FindConsumers = parseResult.GetValue(FindConsumersOption) || this.FindTransitiveConsumers;
 	}
 
 	/// <summary>
@@ -80,6 +86,11 @@ public class PackingProjectsCommand : MSBuildCommandBase
 	public bool FindConsumers { get; init; }
 
 	/// <summary>
+	/// Gets a value indicating whether transitive package consumers should be discovered via project.assets.json.
+	/// </summary>
+	public bool FindTransitiveConsumers { get; init; }
+
+	/// <summary>
 	/// Gets a value indicating whether the output format was explicitly specified.
 	/// </summary>
 	internal bool IsFormatSpecified { get; init; }
@@ -96,6 +107,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 			FormatOption,
 			OutputPathOption,
 			FindConsumersOption,
+			FindTransitiveConsumersOption,
 		};
 		command.SetAction(async (parseResult, cancellationToken) =>
 		{
@@ -126,6 +138,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 		}
 
 		PackingProjectsOutputFormat format = this.GetEffectiveFormat();
+		bool findConsumers = this.FindConsumers || this.FindTransitiveConsumers;
 		TextWriter outputWriter = this.CreateOutputWriter();
 		try
 		{
@@ -137,7 +150,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 			}
 
 			ConcurrentDictionary<string, string> failedProjects = new(StringComparer.OrdinalIgnoreCase);
-			ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> consumedPackagesById = new(StringComparer.OrdinalIgnoreCase);
+			ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById = new(StringComparer.OrdinalIgnoreCase);
 			List<ProjectInstance> evaluatedProjects = [];
 
 			// Use ProjectGraph to expand traversal projects (like dirs.proj) into their referenced projects.
@@ -154,9 +167,13 @@ public class PackingProjectsCommand : MSBuildCommandBase
 						try
 						{
 							ProjectInstance instance = ProjectInstance.FromFile(path, new ProjectOptions { GlobalProperties = effectiveProperties, ProjectCollection = collection });
-							if (this.FindConsumers)
+							if (findConsumers)
 							{
 								CollectConsumedPackages(instance, consumedPackagesById);
+								if (this.FindTransitiveConsumers)
+								{
+									CollectConsumedPackagesFromAssetsFile(instance, consumedPackagesById);
+								}
 							}
 
 							lock (evaluatedProjects)
@@ -187,7 +204,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 
 			string displayPathBaseDirectory = ResolveDisplayPathBaseDirectory(fullInputPath);
 			IReadOnlyList<PackingProjectInfo> packingProjects = FindPackingProjects(projectsToAnalyze, displayPathBaseDirectory);
-			IReadOnlyList<BuiltPackageConsumerInfo> builtPackageConsumers = this.FindConsumers
+			IReadOnlyList<BuiltPackageConsumerInfo> builtPackageConsumers = findConsumers
 				? FindBuiltPackageConsumers(packingProjects, consumedPackagesById, displayPathBaseDirectory)
 				: [];
 			this.WritePackingProjects(packingProjects, failedProjects, builtPackageConsumers, format, outputWriter);
@@ -203,16 +220,17 @@ public class PackingProjectsCommand : MSBuildCommandBase
 
 	private static void CollectConsumedPackages(
 		ProjectInstance project,
-		ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> consumedPackagesById)
+		ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById)
 	{
-		CollectConsumedPackages(project.GetItems("PackageReference"), project, consumedPackagesById);
-		CollectConsumedPackages(project.GetItems("PackageVersion"), project, consumedPackagesById);
+		CollectConsumedPackages(project.GetItems("PackageReference"), project, consumedPackagesById, isDirect: true);
+		CollectConsumedPackages(project.GetItems("PackageVersion"), project, consumedPackagesById, isDirect: true);
 	}
 
 	private static void CollectConsumedPackages(
 		ICollection<ProjectItemInstance> items,
 		ProjectInstance project,
-		ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> consumedPackagesById)
+		ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById,
+		bool isDirect)
 	{
 		foreach (ProjectItemInstance item in items)
 		{
@@ -228,9 +246,127 @@ public class PackingProjectsCommand : MSBuildCommandBase
 				definingProjectPath = project.FullPath;
 			}
 
-			ConcurrentDictionary<string, byte> projectPaths = consumedPackagesById.GetOrAdd(packageId, static _ => new(StringComparer.OrdinalIgnoreCase));
-			projectPaths.TryAdd(NormalizePath(definingProjectPath), 0);
+			AddConsumedPackage(consumedPackagesById, packageId, definingProjectPath, isDirect);
 		}
+	}
+
+	private static void CollectConsumedPackagesFromAssetsFile(
+		ProjectInstance project,
+		ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById)
+	{
+		string? assetsFilePath = GetProjectAssetsFilePath(project);
+		if (assetsFilePath is null || !File.Exists(assetsFilePath))
+		{
+			return;
+		}
+
+		try
+		{
+			(HashSet<string> directPackageIds, HashSet<string> resolvedPackageIds) = ReadProjectAssetsDependencies(assetsFilePath);
+			foreach (string packageId in resolvedPackageIds)
+			{
+				bool isDirect = directPackageIds.Contains(packageId);
+
+				if (isDirect
+					&& consumedPackagesById.TryGetValue(packageId, out ConcurrentDictionary<string, bool>? existingConsumers)
+					&& existingConsumers.Values.Any(static value => value))
+				{
+					continue;
+				}
+
+				AddConsumedPackage(consumedPackagesById, packageId, project.FullPath, isDirect);
+			}
+		}
+		catch (IOException)
+		{
+		}
+		catch (JsonException)
+		{
+		}
+	}
+
+	private static void AddConsumedPackage(
+		ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById,
+		string packageId,
+		string consumerPath,
+		bool isDirect)
+	{
+		ConcurrentDictionary<string, bool> projectPaths = consumedPackagesById.GetOrAdd(packageId, static _ => new(StringComparer.OrdinalIgnoreCase));
+		projectPaths.AddOrUpdate(
+			NormalizePath(consumerPath),
+			static (_, value) => value,
+			static (_, existingValue, newValue) => existingValue || newValue,
+			isDirect);
+	}
+
+	private static string? GetProjectAssetsFilePath(ProjectInstance project)
+	{
+		string projectAssetsFile = project.GetPropertyValue("ProjectAssetsFile");
+		if (!string.IsNullOrWhiteSpace(projectAssetsFile))
+		{
+			return NormalizePath(projectAssetsFile);
+		}
+
+		string projectExtensionsPath = project.GetPropertyValue("MSBuildProjectExtensionsPath");
+		if (!string.IsNullOrWhiteSpace(projectExtensionsPath))
+		{
+			return NormalizePath(Path.Combine(projectExtensionsPath, "project.assets.json"));
+		}
+
+		string baseIntermediateOutputPath = project.GetPropertyValue("BaseIntermediateOutputPath");
+		if (!string.IsNullOrWhiteSpace(baseIntermediateOutputPath))
+		{
+			string projectDirectory = Path.GetDirectoryName(project.FullPath)!;
+			return NormalizePath(Path.Combine(projectDirectory, baseIntermediateOutputPath, "project.assets.json"));
+		}
+
+		string? defaultProjectDirectory = Path.GetDirectoryName(project.FullPath);
+		return defaultProjectDirectory is null ? null : NormalizePath(Path.Combine(defaultProjectDirectory, "obj", "project.assets.json"));
+	}
+
+	private static (HashSet<string> DirectPackageIds, HashSet<string> ResolvedPackageIds) ReadProjectAssetsDependencies(string assetsFilePath)
+	{
+		using FileStream stream = File.OpenRead(assetsFilePath);
+		using JsonDocument document = JsonDocument.Parse(stream);
+
+		HashSet<string> directPackageIds = new(StringComparer.OrdinalIgnoreCase);
+		if (document.RootElement.TryGetProperty("project", out JsonElement projectElement)
+			&& projectElement.TryGetProperty("frameworks", out JsonElement frameworksElement))
+		{
+			foreach (JsonProperty framework in frameworksElement.EnumerateObject())
+			{
+				if (!framework.Value.TryGetProperty("dependencies", out JsonElement dependenciesElement))
+				{
+					continue;
+				}
+
+				foreach (JsonProperty dependency in dependenciesElement.EnumerateObject())
+				{
+					directPackageIds.Add(dependency.Name);
+				}
+			}
+		}
+
+		HashSet<string> resolvedPackageIds = new(StringComparer.OrdinalIgnoreCase);
+		if (document.RootElement.TryGetProperty("libraries", out JsonElement librariesElement))
+		{
+			foreach (JsonProperty library in librariesElement.EnumerateObject())
+			{
+				if (!library.Value.TryGetProperty("type", out JsonElement typeElement)
+					|| !string.Equals(typeElement.GetString(), "package", StringComparison.OrdinalIgnoreCase))
+				{
+					continue;
+				}
+
+				string packageId = library.Name.Split('/')[0];
+				if (!string.IsNullOrWhiteSpace(packageId))
+				{
+					resolvedPackageIds.Add(packageId);
+				}
+			}
+		}
+
+		return (directPackageIds, resolvedPackageIds);
 	}
 
 	private static ProjectInstance CreateMinimalProjectInstance(string projectPath, IDictionary<string, string> globalProperties)
@@ -275,27 +411,37 @@ public class PackingProjectsCommand : MSBuildCommandBase
 
 	private static IReadOnlyList<BuiltPackageConsumerInfo> FindBuiltPackageConsumers(
 		IReadOnlyList<PackingProjectInfo> packingProjects,
-		ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> consumedPackagesById,
+		ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById,
 		string displayPathBaseDirectory)
 	{
 		List<BuiltPackageConsumerInfo> consumers = [];
 		foreach (IGrouping<string, PackingProjectInfo> packageGroup in packingProjects.GroupBy(p => p.PackageId, StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
 		{
-			if (!consumedPackagesById.TryGetValue(packageGroup.Key, out ConcurrentDictionary<string, byte>? consumerPaths))
+			if (!consumedPackagesById.TryGetValue(packageGroup.Key, out ConcurrentDictionary<string, bool>? consumerPaths))
 			{
 				continue;
 			}
 
 			consumers.Add(new BuiltPackageConsumerInfo(
 				packageGroup.Key,
-				consumerPaths.Keys
-					.Select(path => GetPathRelativeTo(displayPathBaseDirectory, path))
-					.OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+				consumerPaths
+					.Select(kv => new BuiltPackageConsumer(
+						GetPathRelativeTo(displayPathBaseDirectory, kv.Key),
+						GetDependencyKindLabel(kv.Value)))
+					.OrderBy(consumer => consumer.ConsumerProjectPath, StringComparer.OrdinalIgnoreCase)
+					.ThenBy(consumer => consumer.DependencyKind, StringComparer.OrdinalIgnoreCase)
 					.ToArray()));
 		}
 
 		return consumers;
 	}
+
+	private static string GetDependencyKindLabel(bool isDirect)
+		=> isDirect switch
+		{
+			true => "direct",
+			false => "transitive",
+		};
 
 	private static bool ProducesPackage(ProjectInstance project)
 	{
@@ -428,7 +574,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 			output.WriteLine($"{packingProject.PackageId}: {packingProject.ProjectPath}");
 		}
 
-		if (this.FindConsumers)
+		if (this.FindConsumers || this.FindTransitiveConsumers)
 		{
 			output.WriteLine();
 			if (builtPackageConsumers.Count == 0)
@@ -441,9 +587,9 @@ public class PackingProjectsCommand : MSBuildCommandBase
 				foreach (BuiltPackageConsumerInfo consumerInfo in builtPackageConsumers)
 				{
 					output.WriteLine($"{consumerInfo.PackageId}:");
-					foreach (string projectPath in consumerInfo.ConsumerProjectPaths)
+					foreach (BuiltPackageConsumer consumer in consumerInfo.Consumers)
 					{
-						output.WriteLine($"  {projectPath}");
+						output.WriteLine($"  {consumer.ConsumerProjectPath} ({consumer.DependencyKind})");
 					}
 				}
 			}
@@ -468,8 +614,15 @@ public class PackingProjectsCommand : MSBuildCommandBase
 	/// Describes projects that consume a package built within the project graph.
 	/// </summary>
 	/// <param name="PackageId">The built package ID that is consumed.</param>
-	/// <param name="ConsumerProjectPaths">The files (project or imported files) that define references to the package.</param>
-	internal sealed record BuiltPackageConsumerInfo(string PackageId, string[] ConsumerProjectPaths);
+	/// <param name="Consumers">The consuming files or projects, along with whether the dependency is direct or transitive.</param>
+	internal sealed record BuiltPackageConsumerInfo(string PackageId, BuiltPackageConsumer[] Consumers);
+
+	/// <summary>
+	/// Describes a project or imported file that consumes a package built within the project graph.
+	/// </summary>
+	/// <param name="ConsumerProjectPath">The path to the consuming project or imported file.</param>
+	/// <param name="DependencyKind">Whether the package dependency is direct or transitive.</param>
+	internal sealed record BuiltPackageConsumer(string ConsumerProjectPath, string DependencyKind);
 
 	/// <summary>
 	/// The output of the packing projects command.
