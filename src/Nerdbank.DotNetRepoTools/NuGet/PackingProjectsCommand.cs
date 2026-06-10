@@ -7,6 +7,7 @@ using Microsoft.Build.Definition;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Graph;
+using Spectre.Console;
 
 namespace Nerdbank.DotNetRepoTools.NuGet;
 
@@ -153,54 +154,15 @@ public class PackingProjectsCommand : MSBuildCommandBase
 			ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById = new(StringComparer.OrdinalIgnoreCase);
 			List<ProjectInstance> evaluatedProjects = [];
 
-			// Use ProjectGraph to expand traversal projects (like dirs.proj) into their referenced projects.
-			// The factory function captures failures for individual projects while allowing successful projects to continue.
-			ProjectGraph? projectGraph = null;
-			try
-			{
-				projectGraph = new(
-					graphInput.EntryPoints,
-					this.MSBuild.ProjectCollection,
-					(path, properties, collection) =>
-					{
-						Dictionary<string, string> effectiveProperties = this.MSBuild.CreateEvaluationProperties(properties);
-						try
-						{
-							ProjectInstance instance = ProjectInstance.FromFile(path, new ProjectOptions { GlobalProperties = effectiveProperties, ProjectCollection = collection });
-							if (findConsumers)
-							{
-								CollectConsumedPackages(instance, consumedPackagesById);
-								if (this.FindTransitiveConsumers)
-								{
-									CollectConsumedPackagesFromAssetsFile(instance, consumedPackagesById);
-								}
-							}
-
-							lock (evaluatedProjects)
-							{
-								evaluatedProjects.Add(instance);
-							}
-
-							return instance;
-						}
-						catch (Exception ex)
-						{
-							failedProjects.TryAdd(path, ex.Message);
-
-							// Return a minimal project instance to allow graph construction to continue.
-							// This project won't be packable, so it will be filtered out later.
-							return CreateMinimalProjectInstance(path, effectiveProperties);
-						}
-					});
-			}
-			catch (Exception)
-			{
-				// Graph construction failed. We've captured what we could via the factory function.
-			}
+			ProjectGraph? projectGraph = await this.CreateProjectGraphAsync(graphInput, failedProjects, evaluatedProjects);
 
 			// Prefer extracting from the graph itself when available (more complete), else use factory-captured instances.
 			IReadOnlyList<ProjectInstance> projectsToAnalyze = projectGraph?.ProjectNodes.Select(n => n.ProjectInstance).ToList()
 				?? (IReadOnlyList<ProjectInstance>)evaluatedProjects;
+			if (findConsumers)
+			{
+				await this.CollectConsumedPackagesAsync(projectsToAnalyze, consumedPackagesById);
+			}
 
 			string displayPathBaseDirectory = ResolveDisplayPathBaseDirectory(fullInputPath);
 			IReadOnlyList<PackingProjectInfo> packingProjects = FindPackingProjects(projectsToAnalyze, displayPathBaseDirectory);
@@ -494,6 +456,134 @@ public class PackingProjectsCommand : MSBuildCommandBase
 
 	private static string GetPathRelativeTo(string baseDirectory, string path)
 		=> Path.TrimEndingDirectorySeparator(Path.GetRelativePath(baseDirectory, path));
+
+	private async Task<ProjectGraph?> CreateProjectGraphAsync(
+		ProjectGraphInput graphInput,
+		ConcurrentDictionary<string, string> failedProjects,
+		List<ProjectInstance> evaluatedProjects)
+	{
+		int discoveredProjects = 0;
+		Func<ProjectGraph?> createGraph = () =>
+		{
+			try
+			{
+				// Use ProjectGraph to expand traversal projects (like dirs.proj) into their referenced projects.
+				// The factory function captures failures for individual projects while allowing successful projects to continue.
+				return new(
+					graphInput.EntryPoints,
+					this.MSBuild.ProjectCollection,
+					(path, properties, collection) =>
+					{
+						Dictionary<string, string> effectiveProperties = this.MSBuild.CreateEvaluationProperties(properties);
+						try
+						{
+							ProjectInstance instance = ProjectInstance.FromFile(path, new ProjectOptions { GlobalProperties = effectiveProperties, ProjectCollection = collection });
+							Interlocked.Increment(ref discoveredProjects);
+
+							lock (evaluatedProjects)
+							{
+								evaluatedProjects.Add(instance);
+							}
+
+							return instance;
+						}
+						catch (Exception ex)
+						{
+							failedProjects.TryAdd(path, ex.Message);
+
+							// Return a minimal project instance to allow graph construction to continue.
+							// This project won't be packable, so it will be filtered out later.
+							return CreateMinimalProjectInstance(path, effectiveProperties);
+						}
+					});
+			}
+			catch (Exception)
+			{
+				// Graph construction failed. We've captured what we could via the factory function.
+				return null;
+			}
+		};
+
+		if (!this.ShouldDisplayInteractiveProgress())
+		{
+			return createGraph();
+		}
+
+		ProjectGraph? projectGraph = null;
+		await AnsiConsole.Status()
+			.Spinner(Spinner.Known.Dots)
+			.StartAsync(
+				"Discovering projects...",
+				async statusContext =>
+				{
+					Task<ProjectGraph?> graphTask = Task.Run(createGraph, this.CancellationToken);
+					while (!graphTask.IsCompleted)
+					{
+						statusContext.Status($"Discovering projects... {Volatile.Read(ref discoveredProjects)} found");
+						try
+						{
+							await Task.Delay(100, this.CancellationToken);
+						}
+						catch (OperationCanceledException)
+						{
+							break;
+						}
+					}
+
+					projectGraph = await graphTask;
+					statusContext.Status($"Discovering projects... {Volatile.Read(ref discoveredProjects)} found");
+				});
+
+		return projectGraph;
+	}
+
+	private async Task CollectConsumedPackagesAsync(
+		IReadOnlyList<ProjectInstance> projects,
+		ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById)
+	{
+		if (projects.Count == 0)
+		{
+			return;
+		}
+
+		if (!this.ShouldDisplayInteractiveProgress())
+		{
+			foreach (ProjectInstance project in projects)
+			{
+				CollectConsumedPackages(project, consumedPackagesById);
+				if (this.FindTransitiveConsumers)
+				{
+					CollectConsumedPackagesFromAssetsFile(project, consumedPackagesById);
+				}
+			}
+
+			return;
+		}
+
+		await AnsiConsole.Progress()
+			.StartAsync(async context =>
+			{
+				ProgressTask parseTask = context.AddTask("Parsing projects", maxValue: projects.Count);
+				foreach (ProjectInstance project in projects)
+				{
+					string projectName = Markup.Escape(Path.GetFileName(project.FullPath));
+					parseTask.Description = $"Parsing {projectName}";
+					CollectConsumedPackages(project, consumedPackagesById);
+
+					if (this.FindTransitiveConsumers)
+					{
+						parseTask.Description = $"Parsing {projectName} (project.assets.json)";
+						CollectConsumedPackagesFromAssetsFile(project, consumedPackagesById);
+					}
+
+					parseTask.Increment(1);
+					await Task.Yield();
+				}
+			});
+	}
+
+	private bool ShouldDisplayInteractiveProgress()
+		=> ReferenceEquals(this.Out, Console.Out) && !Console.IsOutputRedirected;
 
 	private PackingProjectsOutputFormat GetEffectiveFormat()
 	{
