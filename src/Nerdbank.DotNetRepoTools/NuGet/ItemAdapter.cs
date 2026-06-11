@@ -8,7 +8,7 @@ namespace Nerdbank.DotNetRepoTools.NuGet;
 
 internal class ItemAdapter(PackageReference packageReference) : IItem
 {
-	private readonly string version = packageReference.AllowedVersions.ToString();
+	private readonly string version = packageReference.AllowedVersions?.ToString() ?? string.Empty;
 
 	public string Identity { get; init; } = packageReference.PackageIdentity.Id;
 
