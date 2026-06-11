@@ -32,6 +32,7 @@ internal class TargetFrameworkAdapter(string targetFrameworks, NuGetFramework ta
 			"MSBuildProjectName" or "PackageId" => Path.GetFileNameWithoutExtension(this.project.FullPath),
 			"OriginalMSBuildStartupDirectory" or "MSBuildStartupDirectory" => Path.GetDirectoryName(this.project.FullPath)!,
 			"PackageVersion" => "1.0.0",
+			"NETCoreSdkVersion" => Environment.Version.ToString(),
 			"RestoreOutputPath" => Path.GetTempPath(),
 			"RestoreProjectStyle" => ProjectStyle.PackageReference.ToString(),
 			"TargetFramework" => this.targetFrameworkString,
