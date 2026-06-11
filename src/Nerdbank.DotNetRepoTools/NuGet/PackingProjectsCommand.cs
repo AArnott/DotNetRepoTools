@@ -3,6 +3,7 @@
 
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Build.Definition;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
@@ -140,6 +141,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 
 		PackingProjectsOutputFormat format = this.GetEffectiveFormat();
 		bool findConsumers = this.FindConsumers || this.FindTransitiveConsumers;
+		bool displayInteractiveProgress = this.ShouldDisplayInteractiveProgress(format);
 		TextWriter outputWriter = this.CreateOutputWriter();
 		try
 		{
@@ -154,20 +156,20 @@ public class PackingProjectsCommand : MSBuildCommandBase
 			ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById = new(StringComparer.OrdinalIgnoreCase);
 			List<ProjectInstance> evaluatedProjects = [];
 
-			ProjectGraph? projectGraph = await this.CreateProjectGraphAsync(graphInput, failedProjects, evaluatedProjects);
+			ProjectGraph? projectGraph = await this.CreateProjectGraphAsync(graphInput, failedProjects, evaluatedProjects, displayInteractiveProgress);
 
 			// Prefer extracting from the graph itself when available (more complete), else use factory-captured instances.
 			IReadOnlyList<ProjectInstance> projectsToAnalyze = projectGraph?.ProjectNodes.Select(n => n.ProjectInstance).ToList()
 				?? (IReadOnlyList<ProjectInstance>)evaluatedProjects;
 			if (findConsumers)
 			{
-				await this.CollectConsumedPackagesAsync(projectsToAnalyze, consumedPackagesById);
+				await this.CollectConsumedPackagesAsync(projectsToAnalyze, consumedPackagesById, displayInteractiveProgress);
 			}
 
 			string displayPathBaseDirectory = ResolveDisplayPathBaseDirectory(fullInputPath);
 			IReadOnlyList<PackingProjectInfo> packingProjects = FindPackingProjects(projectsToAnalyze, displayPathBaseDirectory);
 			IReadOnlyList<BuiltPackageConsumerInfo> builtPackageConsumers = findConsumers
-				? FindBuiltPackageConsumers(packingProjects, consumedPackagesById, displayPathBaseDirectory)
+				? FindBuiltPackageConsumers(packingProjects, consumedPackagesById, displayPathBaseDirectory, this.FindTransitiveConsumers)
 				: [];
 			this.WritePackingProjects(packingProjects, failedProjects, builtPackageConsumers, format, outputWriter);
 		}
@@ -374,7 +376,8 @@ public class PackingProjectsCommand : MSBuildCommandBase
 	private static IReadOnlyList<BuiltPackageConsumerInfo> FindBuiltPackageConsumers(
 		IReadOnlyList<PackingProjectInfo> packingProjects,
 		ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById,
-		string displayPathBaseDirectory)
+		string displayPathBaseDirectory,
+		bool includeDetailedConsumers)
 	{
 		List<BuiltPackageConsumerInfo> consumers = [];
 		foreach (IGrouping<string, PackingProjectInfo> packageGroup in packingProjects.GroupBy(p => p.PackageId, StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
@@ -384,15 +387,20 @@ public class PackingProjectsCommand : MSBuildCommandBase
 				continue;
 			}
 
+			BuiltPackageConsumer[] detailedConsumers = consumerPaths
+				.Select(kv => new BuiltPackageConsumer(
+					GetPathRelativeTo(displayPathBaseDirectory, kv.Key),
+					GetDependencyKindLabel(kv.Value)))
+				.OrderBy(consumer => consumer.ConsumerProjectPath, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(consumer => consumer.DependencyKind, StringComparer.OrdinalIgnoreCase)
+				.ToArray();
+
 			consumers.Add(new BuiltPackageConsumerInfo(
 				packageGroup.Key,
-				consumerPaths
-					.Select(kv => new BuiltPackageConsumer(
-						GetPathRelativeTo(displayPathBaseDirectory, kv.Key),
-						GetDependencyKindLabel(kv.Value)))
-					.OrderBy(consumer => consumer.ConsumerProjectPath, StringComparer.OrdinalIgnoreCase)
-					.ThenBy(consumer => consumer.DependencyKind, StringComparer.OrdinalIgnoreCase)
-					.ToArray()));
+				detailedConsumers.Select(static consumer => consumer.ConsumerProjectPath).ToArray())
+			{
+				Consumers = includeDetailedConsumers ? detailedConsumers : null,
+			});
 		}
 
 		return consumers;
@@ -460,13 +468,16 @@ public class PackingProjectsCommand : MSBuildCommandBase
 	private async Task<ProjectGraph?> CreateProjectGraphAsync(
 		ProjectGraphInput graphInput,
 		ConcurrentDictionary<string, string> failedProjects,
-		List<ProjectInstance> evaluatedProjects)
+		List<ProjectInstance> evaluatedProjects,
+		bool displayInteractiveProgress)
 	{
 		int discoveredProjects = 0;
 		Func<ProjectGraph?> createGraph = () =>
 		{
 			try
 			{
+				this.CancellationToken.ThrowIfCancellationRequested();
+
 				// Use ProjectGraph to expand traversal projects (like dirs.proj) into their referenced projects.
 				// The factory function captures failures for individual projects while allowing successful projects to continue.
 				return new(
@@ -474,6 +485,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 					this.MSBuild.ProjectCollection,
 					(path, properties, collection) =>
 					{
+						this.CancellationToken.ThrowIfCancellationRequested();
 						Dictionary<string, string> effectiveProperties = this.MSBuild.CreateEvaluationProperties(properties);
 						try
 						{
@@ -487,7 +499,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 
 							return instance;
 						}
-						catch (Exception ex)
+						catch (Exception ex) when (ex is not OperationCanceledException)
 						{
 							failedProjects.TryAdd(path, ex.Message);
 
@@ -497,14 +509,14 @@ public class PackingProjectsCommand : MSBuildCommandBase
 						}
 					});
 			}
-			catch (Exception)
+			catch (Exception ex) when (ex is not OperationCanceledException)
 			{
 				// Graph construction failed. We've captured what we could via the factory function.
 				return null;
 			}
 		};
 
-		if (!this.ShouldDisplayInteractiveProgress())
+		if (!displayInteractiveProgress)
 		{
 			return createGraph();
 		}
@@ -519,18 +531,12 @@ public class PackingProjectsCommand : MSBuildCommandBase
 					Task<ProjectGraph?> graphTask = Task.Run(createGraph, this.CancellationToken);
 					while (!graphTask.IsCompleted)
 					{
+						this.CancellationToken.ThrowIfCancellationRequested();
 						statusContext.Status($"Discovering projects... {Volatile.Read(ref discoveredProjects)} found");
-						try
-						{
-							await Task.Delay(100, this.CancellationToken);
-						}
-						catch (OperationCanceledException)
-						{
-							break;
-						}
+						await Task.Delay(100, this.CancellationToken);
 					}
 
-					projectGraph = await graphTask;
+					projectGraph = await graphTask.WaitAsync(this.CancellationToken);
 					statusContext.Status($"Discovering projects... {Volatile.Read(ref discoveredProjects)} found");
 				});
 
@@ -539,17 +545,19 @@ public class PackingProjectsCommand : MSBuildCommandBase
 
 	private async Task CollectConsumedPackagesAsync(
 		IReadOnlyList<ProjectInstance> projects,
-		ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById)
+		ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> consumedPackagesById,
+		bool displayInteractiveProgress)
 	{
 		if (projects.Count == 0)
 		{
 			return;
 		}
 
-		if (!this.ShouldDisplayInteractiveProgress())
+		if (!displayInteractiveProgress)
 		{
 			foreach (ProjectInstance project in projects)
 			{
+				this.CancellationToken.ThrowIfCancellationRequested();
 				CollectConsumedPackages(project, consumedPackagesById);
 				if (this.FindTransitiveConsumers)
 				{
@@ -566,6 +574,7 @@ public class PackingProjectsCommand : MSBuildCommandBase
 				ProgressTask parseTask = context.AddTask("Parsing projects", maxValue: projects.Count);
 				foreach (ProjectInstance project in projects)
 				{
+					this.CancellationToken.ThrowIfCancellationRequested();
 					string projectName = Markup.Escape(Path.GetFileName(project.FullPath));
 					parseTask.Description = $"Parsing {projectName}";
 					CollectConsumedPackages(project, consumedPackagesById);
@@ -582,8 +591,10 @@ public class PackingProjectsCommand : MSBuildCommandBase
 			});
 	}
 
-	private bool ShouldDisplayInteractiveProgress()
-		=> ReferenceEquals(this.Out, Console.Out) && !Console.IsOutputRedirected;
+	private bool ShouldDisplayInteractiveProgress(PackingProjectsOutputFormat format)
+		=> ReferenceEquals(this.Out, Console.Out)
+		&& !Console.IsOutputRedirected
+		&& !(format == PackingProjectsOutputFormat.Json && string.IsNullOrWhiteSpace(this.OutputPath));
 
 	private PackingProjectsOutputFormat GetEffectiveFormat()
 	{
@@ -677,9 +688,19 @@ public class PackingProjectsCommand : MSBuildCommandBase
 				foreach (BuiltPackageConsumerInfo consumerInfo in builtPackageConsumers)
 				{
 					output.WriteLine($"{consumerInfo.PackageId}:");
-					foreach (BuiltPackageConsumer consumer in consumerInfo.Consumers)
+					if (consumerInfo.Consumers is not null)
 					{
-						output.WriteLine($"  {consumer.ConsumerProjectPath} ({consumer.DependencyKind})");
+						foreach (BuiltPackageConsumer consumer in consumerInfo.Consumers)
+						{
+							output.WriteLine($"  {consumer.ConsumerProjectPath} ({consumer.DependencyKind})");
+						}
+					}
+					else
+					{
+						foreach (string projectPath in consumerInfo.ConsumerProjectPaths)
+						{
+							output.WriteLine($"  {projectPath} (direct)");
+						}
 					}
 				}
 			}
@@ -704,8 +725,15 @@ public class PackingProjectsCommand : MSBuildCommandBase
 	/// Describes projects that consume a package built within the project graph.
 	/// </summary>
 	/// <param name="PackageId">The built package ID that is consumed.</param>
-	/// <param name="Consumers">The consuming files or projects, along with whether the dependency is direct or transitive.</param>
-	internal sealed record BuiltPackageConsumerInfo(string PackageId, BuiltPackageConsumer[] Consumers);
+	/// <param name="ConsumerProjectPaths">The consuming files or projects as plain paths for backward-compatible JSON output.</param>
+	internal sealed record BuiltPackageConsumerInfo(string PackageId, string[] ConsumerProjectPaths)
+	{
+		/// <summary>
+		/// Gets the consuming files or projects, along with whether the dependency is direct or transitive.
+		/// </summary>
+		[property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public BuiltPackageConsumer[]? Consumers { get; init; }
+	}
 
 	/// <summary>
 	/// Describes a project or imported file that consumes a package built within the project graph.

@@ -326,9 +326,10 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		JsonElement legacyConsumer = Assert.Single(
 			builtPackageConsumers.EnumerateArray(),
 			element => element.GetProperty("packageId").GetString() == "Contoso.Legacy");
-		JsonElement legacyConsumerEntry = Assert.Single(legacyConsumer.GetProperty("consumers").EnumerateArray());
-		Assert.Equal(Path.Combine("src", "App", "ImportedPackages.props"), legacyConsumerEntry.GetProperty("consumerProjectPath").GetString());
-		Assert.Equal("direct", legacyConsumerEntry.GetProperty("dependencyKind").GetString());
+		Assert.Equal(
+			Path.Combine("src", "App", "ImportedPackages.props"),
+			Assert.Single(legacyConsumer.GetProperty("consumerProjectPaths").EnumerateArray()).GetString());
+		Assert.False(legacyConsumer.TryGetProperty("consumers", out _));
 	}
 
 	[Fact]
@@ -392,6 +393,9 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		JsonElement legacyConsumerWithTransitive = Assert.Single(
 			builtPackageConsumers.EnumerateArray(),
 			element => element.GetProperty("packageId").GetString() == "Contoso.Legacy");
+		string[] consumerProjectPaths = legacyConsumerWithTransitive.GetProperty("consumerProjectPaths").EnumerateArray().Select(static element => element.GetString()!).ToArray();
+		Assert.Contains(Path.Combine("src", "App", "App.csproj"), consumerProjectPaths);
+		Assert.Contains(Path.Combine("src", "App", "ImportedPackages.props"), consumerProjectPaths);
 		JsonElement legacyConsumerEntry = Assert.Single(
 			legacyConsumerWithTransitive.GetProperty("consumers").EnumerateArray(),
 			element => element.GetProperty("dependencyKind").GetString() == "transitive");
