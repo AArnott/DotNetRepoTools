@@ -21,11 +21,6 @@
 			"groupName": "Microsoft Testing Platform"
 		},
 		{
-			"matchPackageNames": ["Microsoft.Build"],
-			"groupName": "MSBuild",
-			"allowedVersions": "<17.11"
-		},
-		{
 			"matchDatasources": ["dotnet-version", "docker"],
 			"matchDepNames": ["dotnet-sdk", "mcr.microsoft.com/dotnet/sdk"],
 			"groupName": "Dockerfile and global.json updates"
@@ -33,6 +28,11 @@
 		{
 			"matchPackageNames": ["*"],
 			"allowedVersions": "!/-g[a-f0-9]+$/"
+		},
+		{
+			"matchJsonata": ["sharedVariableName='MicrosoftBuildVersion'"],
+			"groupName": "MSBuild",
+			"allowedVersions": "<18.7"
 		},
 		{
 			"matchJsonata": ["sharedVariableName='NuGetVersionForNet8'"],
