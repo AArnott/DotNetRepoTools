@@ -41,6 +41,14 @@
 		{
 			"matchJsonata": ["sharedVariableName='NuGetVersionForNet9'"],
 			"enabled": false
+		},
+		{
+			"matchJsonata": ["sharedVariableName='MicrosoftBuildVersionForNet8'"],
+			"enabled": false
+		},
+		{
+			"matchJsonata": ["sharedVariableName='MicrosoftBuildVersionForNet9'"],
+			"enabled": false
 		}
 	]
 }
