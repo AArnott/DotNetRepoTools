@@ -36,18 +36,22 @@
 		},
 		{
 			"matchJsonata": ["sharedVariableName='NuGetVersionForNet8'"],
+			"matchUpdateTypes": ["major", "minor"],
 			"enabled": false
 		},
 		{
 			"matchJsonata": ["sharedVariableName='NuGetVersionForNet9'"],
+			"matchUpdateTypes": ["major", "minor"],
 			"enabled": false
 		},
 		{
 			"matchJsonata": ["sharedVariableName='MicrosoftBuildVersionForNet8'"],
+			"matchUpdateTypes": ["major", "minor"],
 			"enabled": false
 		},
 		{
 			"matchJsonata": ["sharedVariableName='MicrosoftBuildVersionForNet9'"],
+			"matchUpdateTypes": ["major", "minor"],
 			"enabled": false
 		}
 	]
