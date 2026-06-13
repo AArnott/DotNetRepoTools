@@ -5,7 +5,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
     <MicrosoftTestingPlatformVersion>2.2.3</MicrosoftTestingPlatformVersion>
-    <MicrosoftBuildVersion>18.0.2</MicrosoftBuildVersion>
+    <MicrosoftBuildVersion>18.7.1</MicrosoftBuildVersion>
     <MicrosoftBuildVersionForNet8>17.10.46</MicrosoftBuildVersionForNet8>
     <MicrosoftBuildVersionForNet9>17.14.28</MicrosoftBuildVersionForNet9>
     <NuGetVersion>7.6.0</NuGetVersion>
