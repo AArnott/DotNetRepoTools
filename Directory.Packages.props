@@ -10,7 +10,7 @@
     <MicrosoftBuildVersionForNet9>17.14.28</MicrosoftBuildVersionForNet9>
     <NuGetVersion>7.6.0</NuGetVersion>
     <NuGetVersionForNet8>6.11.1</NuGetVersionForNet8>
-    <NuGetVersionForNet9>6.14.0</NuGetVersionForNet9>
+    <NuGetVersionForNet9>6.14.3</NuGetVersionForNet9>
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
