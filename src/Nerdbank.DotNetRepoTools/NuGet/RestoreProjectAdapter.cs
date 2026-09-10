@@ -32,5 +32,7 @@ internal class RestoreProjectAdapter : IProject
 	public ITargetFramework OuterBuild { get; }
 
 	public IReadOnlyDictionary<string, ITargetFramework> TargetFrameworks => this.targetFrameworks;
+
+	public string? GetGlobalProperty(string propertyName) => null;
 }
 #endif

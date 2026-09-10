@@ -8,7 +8,7 @@
     <MicrosoftBuildVersion>18.6.3</MicrosoftBuildVersion>
     <MicrosoftBuildVersionForNet8>17.10.46</MicrosoftBuildVersionForNet8>
     <MicrosoftBuildVersionForNet9>17.14.28</MicrosoftBuildVersionForNet9>
-    <NuGetVersion>7.6.0</NuGetVersion>
+    <NuGetVersion>7.9.0</NuGetVersion>
     <NuGetVersionForNet8>6.11.1</NuGetVersionForNet8>
     <NuGetVersionForNet9>6.14.3</NuGetVersionForNet9>
   </PropertyGroup>
