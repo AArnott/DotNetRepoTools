@@ -191,7 +191,6 @@ internal class NuGetHelper
 							nameOfChangedProperty = propertyName;
 						}
 					}
-
 				}
 
 				if (nameOfChangedProperty is null)
