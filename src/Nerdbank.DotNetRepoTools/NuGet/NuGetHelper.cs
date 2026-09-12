@@ -192,11 +192,6 @@ internal class NuGetHelper
 						}
 					}
 
-					if (fixesApplied)
-					{
-						this.msbuild.SaveAll();
-						this.msbuild.ReloadEverything();
-					}
 				}
 
 				if (nameOfChangedProperty is null)
@@ -251,6 +246,12 @@ internal class NuGetHelper
 						fixesApplied = true;
 						versionsUpdated++;
 					}
+				}
+
+				if (fixesApplied)
+				{
+					this.msbuild.SaveAll();
+					this.msbuild.ReloadEverything();
 				}
 			}
 		}
