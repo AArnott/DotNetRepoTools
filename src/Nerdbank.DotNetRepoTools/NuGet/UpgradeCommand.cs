@@ -129,9 +129,11 @@ public class UpgradeCommand : MSBuildCommandBase
 		this.CancellationToken.ThrowIfCancellationRequested();
 
 		this.Out.WriteLine("Proactively resolving any introduced package downgrade issues in dependencies.");
-		RestoreTargetGraph restoreGraph = await nuget.GetRestoreTargetGraphAsync(topLevelReferences, [.. targetFrameworks], this.CancellationToken);
-		Dictionary<string, DowngradeResult<RemoteResolveResult>> downgrades = restoreGraph.AnalyzeResult.Downgrades.ToDictionary(r => r.DowngradedTo.Key.Name, StringComparer.OrdinalIgnoreCase);
-		foreach (GraphItem<RemoteResolveResult>? item in restoreGraph.Flattened.Where(i => i.Key.Type == LibraryType.Package))
+		IReadOnlyList<RestoreTargetGraph> restoreGraphs = await nuget.GetRestoreTargetGraphsAsync(topLevelReferences, [.. targetFrameworks], this.CancellationToken);
+		Dictionary<string, DowngradeResult<RemoteResolveResult>> downgrades = restoreGraphs.SelectMany(graph => graph.AnalyzeResult.Downgrades)
+			.GroupBy(result => result.DowngradedTo.Key.Name, StringComparer.OrdinalIgnoreCase)
+			.ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+		foreach (GraphItem<RemoteResolveResult>? item in restoreGraphs.SelectMany(graph => graph.Flattened).Where(i => i.Key.Type == LibraryType.Package))
 		{
 			string version = downgrades.TryGetValue(item.Key.Name, out DowngradeResult<RemoteResolveResult>? downgrade)
 				? downgrade.DowngradedFrom.Item.Key.Version.ToFullString()
