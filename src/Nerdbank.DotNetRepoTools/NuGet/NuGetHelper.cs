@@ -191,6 +191,12 @@ internal class NuGetHelper
 							nameOfChangedProperty = propertyName;
 						}
 					}
+
+					if (fixesApplied)
+					{
+						this.msbuild.SaveAll();
+						this.msbuild.ReloadEverything();
+					}
 				}
 
 				if (nameOfChangedProperty is null)
