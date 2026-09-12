@@ -33,7 +33,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		{
 			PackageId = "Nerdbank.Streams",
 			PackageVersion = "2.9.112",
-			TargetFramework = "netstandard2.0",
+			TargetFrameworks = ["netstandard2.0", "net8.0", "net8.0"],
 			Path = this.StagingDirectory,
 		};
 

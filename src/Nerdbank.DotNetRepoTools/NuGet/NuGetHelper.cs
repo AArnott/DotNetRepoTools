@@ -122,7 +122,11 @@ internal class NuGetHelper
 
 		foreach (IAssetsLogMessage message in restoreResultResult.LogMessages)
 		{
-			this.Error.WriteLine($"{message.Message}");
+			if (!message.Message.StartsWith("Invalid project-package combination for ", StringComparison.Ordinal) &&
+				!(message.Message.StartsWith("Package ", StringComparison.Ordinal) && message.Message.Contains(" is not compatible with ", StringComparison.Ordinal)))
+			{
+				this.Error.WriteLine($"{message.Message}");
+			}
 		}
 
 		foreach (LibraryRange issue in restoreTargetGraph.Unresolved)
@@ -213,7 +217,7 @@ internal class NuGetHelper
 		return changed;
 	}
 
-	internal async Task<int> CorrectDowngradeIssuesAsync(NuGetFramework framework, PackageReference? hypotheticalPackageReference, HashSet<string>? disregardVersionProperties, CancellationToken cancellationToken)
+	internal async Task<int> CorrectDowngradeIssuesAsync(IReadOnlyList<NuGetFramework> targetFrameworks, HashSet<string>? disregardVersionProperties, CancellationToken cancellationToken)
 	{
 		int versionsUpdated = 0;
 		bool fixesApplied = true;
@@ -225,16 +229,10 @@ internal class NuGetHelper
 
 			this.Project.ReevaluateIfNecessary();
 			List<PackageReference> packageReferences = this.Project.GetItems(PackageVersionItemType)
-				.Select(pv => this.CreatePackageReference(pv.EvaluatedInclude, pv.GetMetadataValue(VersionMetadata), framework)).ToList();
-
-			if (hypotheticalPackageReference is not null)
-			{
-				packageReferences.Add(hypotheticalPackageReference);
-			}
-
-			RestoreTargetGraph restoreGraph = await this.GetRestoreTargetGraphAsync(packageReferences, new() { framework }, cancellationToken);
+				.SelectMany(pv => targetFrameworks.Select(framework => this.CreatePackageReference(pv.EvaluatedInclude, pv.GetMetadataValue(VersionMetadata), framework))).ToList();
 
 			fixesApplied = false;
+			RestoreTargetGraph restoreGraph = await this.GetRestoreTargetGraphAsync(packageReferences, [.. targetFrameworks], cancellationToken);
 			foreach (DowngradeResult<RemoteResolveResult> conflict in restoreGraph.AnalyzeResult.Downgrades)
 			{
 				if (conflict.DowngradedFrom.Key.VersionRange?.OriginalString is string originalVersion &&
