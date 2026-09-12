@@ -34,7 +34,12 @@ public class ReconcileVersionsCommand : MSBuildCommandBase
 	/// <summary>
 	/// Gets the target framework used to evaluate package dependencies.
 	/// </summary>
-	public required string TargetFramework { get; init; }
+	public string? TargetFramework { get; init; }
+
+	/// <summary>
+	/// Gets the target frameworks used to evaluate package dependencies.
+	/// </summary>
+	public IReadOnlyList<string>? TargetFrameworks { get; init; }
 
 	/// <summary>
 	/// Gets the set of version properties to disregard when updating package versions that were previously defined by properties.
@@ -48,7 +53,7 @@ public class ReconcileVersionsCommand : MSBuildCommandBase
 	internal static Command CreateCommand()
 	{
 		Option<FileSystemInfo> pathOption = new Option<FileSystemInfo>("--path") { Description = "The path to the project or repo to resolve version issues with." }.AcceptExistingOnly();
-		Option<string> frameworkOption = new Option<string>("--framework", "-f") { DefaultValueFactory = _ => "netstandard2.0", Description = "The target framework used to evaluate package dependencies." };
+		Option<string[]> frameworkOption = new Option<string[]>("--framework", "-f") { Description = "The target frameworks used to evaluate package dependencies.", AllowMultipleArgumentsPerToken = true };
 		Option<string[]> disregardVersionPropertiesOption = new("--disregard-version-properties") { Description = "Specifies one or more MSBuild properties that may be used to define a PackageVersion item's Version attribute that should no longer be referenced. This may be useful when properties have been used for multiple packages and their continued use is problematic because the packages now need their own distinct versions.", AllowMultipleArgumentsPerToken = true };
 
 		Command command = new("reconcile-versions", "Resolves all package downgrade warnings.")
@@ -60,7 +65,7 @@ public class ReconcileVersionsCommand : MSBuildCommandBase
 		command.SetAction((parseResult, cancellationToken) => new ReconcileVersionsCommand(parseResult, cancellationToken)
 		{
 			ProjectPath = parseResult.GetValue(pathOption)?.FullName ?? Environment.CurrentDirectory,
-			TargetFramework = parseResult.GetValue(frameworkOption)!,
+			TargetFrameworks = parseResult.GetValue(frameworkOption),
 			DisregardVersionProperties = parseResult.GetValue(disregardVersionPropertiesOption)?.ToHashSet(StringComparer.OrdinalIgnoreCase),
 		}.ExecuteAndDisposeAsync());
 
@@ -72,8 +77,8 @@ public class ReconcileVersionsCommand : MSBuildCommandBase
 	{
 		NuGetHelper nuget = new(this.MSBuild, this.ProjectPath) { Out = this.Out, Error = this.Error };
 
-		NuGetFramework nugetFramework = NuGetFramework.Parse(this.TargetFramework);
-		int versionsUpdated = await nuget.CorrectDowngradeIssuesAsync(nugetFramework, null, this.DisregardVersionProperties, this.CancellationToken);
+		IReadOnlyList<NuGetFramework> targetFrameworks = TargetFrameworkResolver.Resolve(this.MSBuild, this.ProjectPath, this.TargetFrameworks ?? (this.TargetFramework is null ? null : [this.TargetFramework]));
+		int versionsUpdated = await nuget.CorrectDowngradeIssuesAsync(targetFrameworks, this.DisregardVersionProperties, this.CancellationToken);
 		this.Out.WriteLine($"All done. {versionsUpdated} package versions were updated.");
 	}
 }

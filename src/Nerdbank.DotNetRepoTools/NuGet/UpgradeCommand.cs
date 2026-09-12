@@ -48,7 +48,12 @@ public class UpgradeCommand : MSBuildCommandBase
 	/// <summary>
 	/// Gets the target framework used to evaluate package dependencies.
 	/// </summary>
-	public required string TargetFramework { get; init; }
+	public string? TargetFramework { get; init; }
+
+	/// <summary>
+	/// Gets the target frameworks used to evaluate package dependencies.
+	/// </summary>
+	public IReadOnlyList<string>? TargetFrameworks { get; init; }
 
 	/// <summary>
 	/// Gets a value indicating whether all transitive dependencies will be explicitly added (not just updated as needed if they exist).
@@ -69,7 +74,7 @@ public class UpgradeCommand : MSBuildCommandBase
 		Argument<string> packageIdArgument = new Argument<string>("id") { Description = "The ID of the root package to be upgraded." };
 		Argument<string> packageVersionArgument = new Argument<string>("version") { Description = "The version to upgrade to." };
 		Option<FileSystemInfo> pathOption = new Option<FileSystemInfo>("--path") { Description = "The path to the project or repo to upgrade.", Required = !File.Exists(DirectoryPackagesPropsFileName) }.AcceptExistingOnly();
-		Option<string> frameworkOption = new Option<string>("--framework", "-f") { Description = "The target framework used to evaluate package dependencies.", DefaultValueFactory = _ => "netstandard2.0" };
+		Option<string[]> frameworkOption = new Option<string[]>("--framework", "-f") { Description = "The target frameworks used to evaluate package dependencies.", AllowMultipleArgumentsPerToken = true };
 		Option<bool> explodeOption = new("--explode") { Description = "Add PackageVersion items for every transitive dependency, so that they can be added as direct project dependencies as versions are pre-specified." };
 		Option<string[]> disregardVersionPropertiesOption = new("--disregard-version-properties") { Description = "Specifies one or more MSBuild properties that may be used to define a PackageVersion item's Version attribute that should no longer be referenced. This may be useful when properties have been used for multiple packages and their continued use is problematic because the packages now need their own distinct versions.", AllowMultipleArgumentsPerToken = true };
 
@@ -87,7 +92,7 @@ public class UpgradeCommand : MSBuildCommandBase
 			PackageId = parseResult.GetValue(packageIdArgument)!,
 			PackageVersion = parseResult.GetValue(packageVersionArgument)!,
 			Path = parseResult.GetValue(pathOption)?.FullName ?? Environment.CurrentDirectory,
-			TargetFramework = parseResult.GetValue(frameworkOption)!,
+			TargetFrameworks = parseResult.GetValue(frameworkOption),
 			Explode = parseResult.GetValue(explodeOption),
 			DisregardVersionProperties = parseResult.GetValue(disregardVersionPropertiesOption)?.ToHashSet(StringComparer.OrdinalIgnoreCase),
 		}.ExecuteAndDisposeAsync());
@@ -117,17 +122,18 @@ public class UpgradeCommand : MSBuildCommandBase
 			nuget.Project.ReevaluateIfNecessary();
 		}
 
-		NuGetFramework nugetFramework = NuGetFramework.Parse(this.TargetFramework);
-		List<NuGetFramework> targetFrameworks = new() { nugetFramework };
-		PackageReference topLevelReference = nuget.CreatePackageReference(this.PackageId, this.PackageVersion, nugetFramework);
+		IReadOnlyList<NuGetFramework> targetFrameworks = TargetFrameworkResolver.Resolve(this.MSBuild, this.Path, this.TargetFrameworks ?? (this.TargetFramework is null ? null : [this.TargetFramework]));
+		PackageReference[] topLevelReferences = [.. targetFrameworks.Select(framework => nuget.CreatePackageReference(this.PackageId, this.PackageVersion, framework))];
 
 		// Visit every transitive dependency and explicitly set it.
 		this.CancellationToken.ThrowIfCancellationRequested();
 
 		this.Out.WriteLine("Proactively resolving any introduced package downgrade issues in dependencies.");
-		RestoreTargetGraph restoreGraph = await nuget.GetRestoreTargetGraphAsync(new[] { topLevelReference }, targetFrameworks, this.CancellationToken);
-		Dictionary<string, DowngradeResult<RemoteResolveResult>> downgrades = restoreGraph.AnalyzeResult.Downgrades.ToDictionary(r => r.DowngradedTo.Key.Name, StringComparer.OrdinalIgnoreCase);
-		foreach (GraphItem<RemoteResolveResult>? item in restoreGraph.Flattened.Where(i => i.Key.Type == LibraryType.Package))
+		IReadOnlyList<RestoreTargetGraph> restoreGraphs = await nuget.GetRestoreTargetGraphsAsync(topLevelReferences, [.. targetFrameworks], this.CancellationToken);
+		Dictionary<string, DowngradeResult<RemoteResolveResult>> downgrades = restoreGraphs.SelectMany(graph => graph.AnalyzeResult.Downgrades)
+			.GroupBy(result => result.DowngradedTo.Key.Name, StringComparer.OrdinalIgnoreCase)
+			.ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+		foreach (GraphItem<RemoteResolveResult>? item in restoreGraphs.SelectMany(graph => graph.Flattened).Where(i => i.Key.Type == LibraryType.Package))
 		{
 			string version = downgrades.TryGetValue(item.Key.Name, out DowngradeResult<RemoteResolveResult>? downgrade)
 				? downgrade.DowngradedFrom.Item.Key.Version.ToFullString()

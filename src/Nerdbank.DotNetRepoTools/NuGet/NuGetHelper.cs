@@ -77,7 +77,7 @@ internal class NuGetHelper
 		return new PackageReference(new PackageIdentity(id, null), nugetFramework, userInstalled: true, developmentDependency: false, requireReinstallation: false, VersionRange.Parse(version));
 	}
 
-	internal async Task<RestoreTargetGraph> GetRestoreTargetGraphAsync(IReadOnlyCollection<PackageReference> packages, List<NuGetFramework> targetFrameworks, CancellationToken cancellationToken)
+	internal async Task<IReadOnlyList<RestoreTargetGraph>> GetRestoreTargetGraphsAsync(IReadOnlyCollection<PackageReference> packages, List<NuGetFramework> targetFrameworks, CancellationToken cancellationToken, bool suppressSyntheticCompatibilityErrors = false)
 	{
 		PackageSpec packageSpec = GetPackageSpec(this.Project.FullPath, this.NuGetSettings, packages, targetFrameworks) ?? throw new InvalidOperationException("Unable to generate a package spec for this project.");
 		packageSpec.RestoreMetadata.PackagesPath = SettingsUtility.GetGlobalPackagesFolder(this.NuGetSettings);
@@ -118,19 +118,23 @@ internal class NuGetHelper
 		IReadOnlyList<RestoreResultPair> restoreResult = await RestoreRunner.RunWithoutCommit(requests, restoreArgs);
 
 		RestoreResult restoreResultResult = restoreResult[0].Result;
-		RestoreTargetGraph restoreTargetGraph = restoreResultResult.RestoreGraphs.First();
 
 		foreach (IAssetsLogMessage message in restoreResultResult.LogMessages)
 		{
-			this.Error.WriteLine($"{message.Message}");
+			if (!suppressSyntheticCompatibilityErrors ||
+				(!message.Message.StartsWith("Invalid project-package combination for ", StringComparison.Ordinal) &&
+				!(message.Message.StartsWith("Package ", StringComparison.Ordinal) && message.Message.Contains(" is not compatible with ", StringComparison.Ordinal))))
+			{
+				this.Error.WriteLine($"{message.Message}");
+			}
 		}
 
-		foreach (LibraryRange issue in restoreTargetGraph.Unresolved)
+		foreach (LibraryRange issue in restoreResultResult.RestoreGraphs.SelectMany(graph => graph.Unresolved))
 		{
 			this.Error.WriteLine($"Unresolved package: {issue.Name} {issue.VersionRange}");
 		}
 
-		return restoreTargetGraph;
+		return restoreResultResult.RestoreGraphs.ToList();
 	}
 
 	internal bool SetPackageVersion(string id, string version, bool addIfMissing = true, bool allowDowngrade = true, HashSet<string>? disregardVersionProperties = null)
@@ -213,7 +217,7 @@ internal class NuGetHelper
 		return changed;
 	}
 
-	internal async Task<int> CorrectDowngradeIssuesAsync(NuGetFramework framework, PackageReference? hypotheticalPackageReference, HashSet<string>? disregardVersionProperties, CancellationToken cancellationToken)
+	internal async Task<int> CorrectDowngradeIssuesAsync(IReadOnlyList<NuGetFramework> targetFrameworks, HashSet<string>? disregardVersionProperties, CancellationToken cancellationToken)
 	{
 		int versionsUpdated = 0;
 		bool fixesApplied = true;
@@ -225,17 +229,10 @@ internal class NuGetHelper
 
 			this.Project.ReevaluateIfNecessary();
 			List<PackageReference> packageReferences = this.Project.GetItems(PackageVersionItemType)
-				.Select(pv => this.CreatePackageReference(pv.EvaluatedInclude, pv.GetMetadataValue(VersionMetadata), framework)).ToList();
-
-			if (hypotheticalPackageReference is not null)
-			{
-				packageReferences.Add(hypotheticalPackageReference);
-			}
-
-			RestoreTargetGraph restoreGraph = await this.GetRestoreTargetGraphAsync(packageReferences, new() { framework }, cancellationToken);
-
+				.SelectMany(packageVersion => targetFrameworks.Select(framework => this.CreatePackageReference(packageVersion.EvaluatedInclude, packageVersion.GetMetadataValue(VersionMetadata), framework))).ToList();
 			fixesApplied = false;
-			foreach (DowngradeResult<RemoteResolveResult> conflict in restoreGraph.AnalyzeResult.Downgrades)
+			IReadOnlyList<RestoreTargetGraph> restoreGraphs = await this.GetRestoreTargetGraphsAsync(packageReferences, [.. targetFrameworks], cancellationToken, suppressSyntheticCompatibilityErrors: true);
+			foreach (DowngradeResult<RemoteResolveResult> conflict in restoreGraphs.SelectMany(graph => graph.AnalyzeResult.Downgrades))
 			{
 				if (conflict.DowngradedFrom.Key.VersionRange?.OriginalString is string originalVersion &&
 					this.SetPackageVersion(conflict.DowngradedFrom.Key.Name, originalVersion, disregardVersionProperties: disregardVersionProperties))
