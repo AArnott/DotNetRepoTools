@@ -228,47 +228,22 @@ internal class NuGetHelper
 			this.Out.WriteLine("Looking for package downgrade issues...");
 
 			this.Project.ReevaluateIfNecessary();
+			List<PackageReference> packageReferences = this.Project.GetItems(PackageVersionItemType)
+				.SelectMany(packageVersion => targetFrameworks.Select(framework => this.CreatePackageReference(packageVersion.EvaluatedInclude, packageVersion.GetMetadataValue(VersionMetadata), framework))).ToList();
 			fixesApplied = false;
-			foreach (NuGetFramework targetFramework in targetFrameworks)
+			IReadOnlyList<RestoreTargetGraph> restoreGraphs = await this.GetRestoreTargetGraphsAsync(packageReferences, [.. targetFrameworks], cancellationToken, suppressSyntheticCompatibilityErrors: true);
+			foreach (DowngradeResult<RemoteResolveResult> conflict in restoreGraphs.SelectMany(graph => graph.AnalyzeResult.Downgrades))
 			{
-				List<PackageReference> packageReferences = this.GetPackageVersionItems(targetFramework)
-					.Select(packageVersion => (PackageId: packageVersion.EvaluatedInclude, Version: packageVersion.GetMetadataValue(VersionMetadata)))
-					.Where(packageVersion => packageVersion.Version.Length > 0)
-					.Select(packageVersion => this.CreatePackageReference(packageVersion.PackageId, packageVersion.Version, targetFramework))
-					.ToList();
-				IReadOnlyList<RestoreTargetGraph> restoreGraphs = await this.GetRestoreTargetGraphsAsync(packageReferences, [targetFramework], cancellationToken, suppressSyntheticCompatibilityErrors: true);
-				foreach (DowngradeResult<RemoteResolveResult> conflict in restoreGraphs.SelectMany(graph => graph.AnalyzeResult.Downgrades))
+				if (conflict.DowngradedFrom.Key.VersionRange?.OriginalString is string originalVersion &&
+					this.SetPackageVersion(conflict.DowngradedFrom.Key.Name, originalVersion, disregardVersionProperties: disregardVersionProperties))
 				{
-					if (conflict.DowngradedFrom.Key.VersionRange?.OriginalString is string originalVersion &&
-						this.SetPackageVersion(conflict.DowngradedFrom.Key.Name, originalVersion, disregardVersionProperties: disregardVersionProperties))
-					{
-						fixesApplied = true;
-						versionsUpdated++;
-					}
-				}
-
-				if (fixesApplied)
-				{
-					this.msbuild.SaveAll();
-					this.msbuild.ReloadEverything();
+					fixesApplied = true;
+					versionsUpdated++;
 				}
 			}
 		}
 
 		return versionsUpdated;
-	}
-
-	internal IEnumerable<ProjectItem> GetPackageVersionItems(NuGetFramework targetFramework)
-	{
-		ProjectRootElement directoryPackagesProps = this.Project.Imports
-			.FirstOrDefault(import => string.Equals(Path.GetFileName(import.ImportedProject.FullPath), "Directory.Packages.props", StringComparison.OrdinalIgnoreCase))
-			.ImportedProject
-			?? throw new InvalidOperationException("Unable to find an imported Directory.Packages.props.");
-		Project project = this.msbuild.EvaluateProject(
-			directoryPackagesProps.FullPath,
-			targetFramework.GetShortFolderName(),
-			ProjectLoadSettings.IgnoreMissingImports | ProjectLoadSettings.IgnoreInvalidImports);
-		return project.GetItems(PackageVersionItemType);
 	}
 
 	private static Project OpenOrCreateSandboxProject(MSBuild msbuild, string path)
