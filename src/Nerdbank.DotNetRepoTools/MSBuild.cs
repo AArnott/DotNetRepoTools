@@ -144,20 +144,6 @@ public class MSBuild : IDisposable
 		return effectiveProperties;
 	}
 
-	internal Project EvaluateProject(string projectFile, string targetFramework, ProjectLoadSettings projectLoadSettings)
-	{
-		string fullPath = Path.GetFullPath(projectFile);
-		Project? loadedProject = this.ProjectCollection.GetLoadedProjects(fullPath).FirstOrDefault(project =>
-			project.GlobalProperties.TryGetValue("TargetFramework", out string? loadedTargetFramework) &&
-			string.Equals(loadedTargetFramework, targetFramework, StringComparison.OrdinalIgnoreCase));
-		return loadedProject ?? new Project(
-			fullPath,
-			this.CreateEvaluationProperties(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["TargetFramework"] = targetFramework }),
-			toolsVersion: null,
-			this.ProjectCollection,
-			projectLoadSettings);
-	}
-
 	/// <summary>
 	/// Synthesizes a project in memory, under some path.
 	/// </summary>
