@@ -8,62 +8,52 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Nerdbank.DotNetRepoTools.AzureDevOps;
 
-[Collection(nameof(CurrentDirectorySensitiveTestCollection))]
+[NotInParallel("CurrentDirectorySensitive")]
 public class PullRequestCreateCommandTests : TestBase
 {
-	private readonly string originalCurrentDirectory = Environment.CurrentDirectory;
-	private TestablePullRequestCreateCommand? command;
+	public string OriginalCurrentDirectory { get; } = Environment.CurrentDirectory;
 
-	public PullRequestCreateCommandTests(ITestOutputHelper logger)
-		: base(logger)
+	public override async ValueTask CleanupAsync()
 	{
+		Environment.CurrentDirectory = this.OriginalCurrentDirectory;
+		await base.CleanupAsync();
 	}
 
-	public override async ValueTask DisposeAsync()
-	{
-		Environment.CurrentDirectory = this.originalCurrentDirectory;
-		if (this.command is not null)
-		{
-			if (this.command.Out is StringWriter outWriter && this.command.Error is StringWriter errorWriter)
-			{
-				this.DumpConsole(outWriter, errorWriter);
-			}
-
-			this.command.Dispose();
-		}
-
-		await base.DisposeAsync();
-	}
-
-	[Fact]
+	[Test]
 	public async Task DefaultsSourceAndTargetWhenOptionsAreOmitted()
 	{
 		string repoPath = await this.CreateGitRepoAsync("feature/test-pr");
 		Environment.CurrentDirectory = repoPath;
-		this.command = this.CreateCommand(sourceRefName: null, targetRefName: null);
-		this.command.RepositoryDefaultBranch = "refs/heads/main";
+		TestablePullRequestCreateCommand command = this.CreateCommand(sourceRefName: null, targetRefName: null);
+		command.RepositoryDefaultBranch = "refs/heads/main";
 
-		await this.ExecuteCommandAsync();
+		await this.ExecuteCommandAsync(command);
 
-		Assert.Equal(0, this.command.ExitCode);
-		JsonObject requestBody = this.GetPostedBody();
-		Assert.Equal("https://dev.azure.com/fabrikam/Project/_apis/git/repositories/Repo?api-version=7.1", this.command.RepositoryRequestUri);
+		Assert.Equal(0, command.ExitCode);
+		JsonObject requestBody = this.GetPostedBody(command);
+		Assert.Equal("https://dev.azure.com/fabrikam/Project/_apis/git/repositories/Repo?api-version=7.1", command.RepositoryRequestUri);
 		Assert.Equal("refs/heads/feature/test-pr", requestBody["sourceRefName"]?.GetValue<string>());
 		Assert.Equal("refs/heads/main", requestBody["targetRefName"]?.GetValue<string>());
 	}
 
-	[Fact]
+	[Test]
 	public async Task ReportsErrorWhenSourceCannotBeInferred()
 	{
 		Directory.CreateDirectory(this.StagingDirectory);
 		Environment.CurrentDirectory = this.StagingDirectory;
-		this.command = this.CreateCommand(sourceRefName: null, targetRefName: "main");
+		TestablePullRequestCreateCommand command = this.CreateCommand(sourceRefName: null, targetRefName: "main");
 
-		await this.ExecuteCommandAsync();
+		await this.ExecuteCommandAsync(command);
 
-		Assert.Equal(1, this.command.ExitCode);
-		Assert.Contains("Specify --source", ((StringWriter)this.command.Error).ToString(), StringComparison.Ordinal);
-		Assert.Null(this.command.PostBody);
+		Assert.Equal(1, command.ExitCode);
+		Assert.Contains("Specify --source", ((StringWriter)command.Error).ToString(), StringComparison.Ordinal);
+		Assert.Null(command.PostBody);
+	}
+
+	private JsonObject GetPostedBody(TestablePullRequestCreateCommand command)
+	{
+		Assert.NotNull(command.PostBody);
+		return JsonNode.Parse(command.PostBody!)!.AsObject();
 	}
 
 	private TestablePullRequestCreateCommand CreateCommand(string? sourceRefName, string? targetRefName) => new()
@@ -79,19 +69,22 @@ public class PullRequestCreateCommandTests : TestBase
 		Title = "Test title",
 	};
 
-	private async Task ExecuteCommandAsync()
+	private async Task ExecuteCommandAsync(TestablePullRequestCreateCommand command)
 	{
-		Assert.NotNull(this.command);
 		this.MSBuild.SaveAll();
-		await this.command.ExecuteAndDisposeAsync();
-		this.MSBuild.ReloadEverything();
-	}
+		try
+		{
+			await command.ExecuteAndDisposeAsync();
+		}
+		finally
+		{
+			if (command.Out is StringWriter outWriter && command.Error is StringWriter errorWriter)
+			{
+				this.DumpConsole(outWriter, errorWriter);
+			}
+		}
 
-	private JsonObject GetPostedBody()
-	{
-		Assert.NotNull(this.command);
-		Assert.NotNull(this.command.PostBody);
-		return JsonNode.Parse(this.command.PostBody!)!.AsObject();
+		this.MSBuild.ReloadEverything();
 	}
 
 	private async Task<string> CreateGitRepoAsync(string branchName)
@@ -113,9 +106,9 @@ public class PullRequestCreateCommandTests : TestBase
 		};
 
 		using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to spawn git.");
-		string stdout = await process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
-		string stderr = await process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
-		await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+		string stdout = await process.StandardOutput.ReadToEndAsync(TestContext.Current!.Execution.CancellationToken);
+		string stderr = await process.StandardError.ReadToEndAsync(TestContext.Current!.Execution.CancellationToken);
+		await process.WaitForExitAsync(TestContext.Current!.Execution.CancellationToken);
 
 		Assert.True(process.ExitCode == 0, $"git {arguments} failed.{Environment.NewLine}{stdout}{stderr}");
 	}

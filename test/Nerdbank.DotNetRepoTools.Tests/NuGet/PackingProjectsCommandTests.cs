@@ -11,15 +11,10 @@ using Nerdbank.DotNetRepoTools.NuGet;
 
 namespace NuGet;
 
-[Collection(nameof(CurrentDirectorySensitiveTestCollection))]
+[NotInParallel("CurrentDirectorySensitive")]
 public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsCommand>
 {
-	public PackingProjectsCommandTests(ITestOutputHelper logger)
-		: base(logger)
-	{
-	}
-
-	[Fact]
+	[Test]
 	public void CreateCommand_DefinesFormatOptionAlias()
 	{
 		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -28,7 +23,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.Contains("-f", formatOption.Aliases);
 	}
 
-	[Fact]
+	[Test]
 	public void CreateCommand_DefinesFindConsumersOptionAlias()
 	{
 		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -37,7 +32,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.Contains("-c", findConsumersOption.Aliases);
 	}
 
-	[Fact]
+	[Test]
 	public void CreateCommand_DefinesFindTransitiveConsumersOption()
 	{
 		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -45,7 +40,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.Single(command.Options, option => option.Name == "--find-transitive-consumers");
 	}
 
-	[Fact]
+	[Test]
 	public void Constructor_EnablesFindConsumersWhenFindTransitiveConsumersSpecified()
 	{
 		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -58,7 +53,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.True(packingProjectsCommand.FindConsumers);
 	}
 
-	[Fact]
+	[Test]
 	public void CreateCommand_DefinesOutputPathOptionAlias()
 	{
 		MethodInfo createCommandMethod = typeof(PackingProjectsCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -67,7 +62,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.Contains("-o", outputPathOption.Aliases);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ListsPackingProjectsForProjectInput()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -92,7 +87,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 			lines);
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesJsonForProjectInput()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -122,7 +117,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.Equal(0, json.RootElement.GetProperty("builtPackageConsumers").GetArrayLength());
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesTextToOutputFileWhenOutputPathSpecified()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -138,12 +133,12 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 
 		Assert.Equal(0, this.Command.ExitCode);
 		Assert.Equal(string.Empty, ((StringWriter)this.Command.Out).ToString());
-		string fileOutput = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		string fileOutput = await File.ReadAllTextAsync(outputPath, TestContext.Current!.Execution.CancellationToken);
 		Assert.Contains($"App: {Path.Combine("src", "App", "App.csproj")}", fileOutput);
 		Assert.Contains($"Contoso.Packed: {Path.Combine("src", "Packed", "Packed.csproj")}", fileOutput);
 	}
 
-	[Fact]
+	[Test]
 	public async Task InfersJsonFormatFromOutputPathWhenFormatOmitted()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -159,11 +154,11 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 
 		Assert.Equal(0, this.Command.ExitCode);
 		Assert.Equal(string.Empty, ((StringWriter)this.Command.Out).ToString());
-		using JsonDocument json = JsonDocument.Parse(await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken));
+		using JsonDocument json = JsonDocument.Parse(await File.ReadAllTextAsync(outputPath, TestContext.Current!.Execution.CancellationToken));
 		Assert.Equal(4, json.RootElement.GetProperty("packingProjects").GetArrayLength());
 	}
 
-	[Fact]
+	[Test]
 	public async Task UsesTextFormatForNonJsonOutputPathWhenFormatOmitted()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -178,12 +173,12 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await this.ExecuteCommandAsync();
 
 		Assert.Equal(0, this.Command.ExitCode);
-		string output = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		string output = await File.ReadAllTextAsync(outputPath, TestContext.Current!.Execution.CancellationToken);
 		Assert.Contains($"App: {Path.Combine("src", "App", "App.csproj")}", output);
 		Assert.DoesNotContain("\"packingProjects\"", output);
 	}
 
-	[Fact]
+	[Test]
 	public async Task LeavesStdOutUsableWhenOutputPathIsNotSpecified()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -201,7 +196,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.EndsWith("tail", stdOutWriter.ToString(), StringComparison.Ordinal);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ListsConsumersOfBuiltPackagesWhenRequested()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -221,7 +216,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			importedItemsPath,
 			importedItemsContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		string rootProjectContent = string.Join(
 			Environment.NewLine,
 			[
@@ -242,7 +237,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			rootProjectPath,
 			rootProjectContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		await WriteProjectAssetsFileAsync(
 			rootProjectPath,
 			directPackageIds: ["Contoso.Packed"],
@@ -265,7 +260,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.DoesNotContain($"  {Path.Combine("src", "App", "App.csproj")} (transitive)", output);
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesJsonConsumersOfBuiltPackagesWhenRequested()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -284,7 +279,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			importedItemsPath,
 			importedItemsContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		string rootProjectContent = string.Join(
 			Environment.NewLine,
 			[
@@ -305,7 +300,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			rootProjectPath,
 			rootProjectContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		await WriteProjectAssetsFileAsync(
 			rootProjectPath,
 			directPackageIds: [],
@@ -332,7 +327,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.False(legacyConsumer.TryGetProperty("consumers", out _));
 	}
 
-	[Fact]
+	[Test]
 	public async Task FindsTransitiveConsumersWhenRequested()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -351,7 +346,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			importedItemsPath,
 			importedItemsContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		string rootProjectContent = string.Join(
 			Environment.NewLine,
 			[
@@ -372,7 +367,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			rootProjectPath,
 			rootProjectContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		await WriteProjectAssetsFileAsync(
 			rootProjectPath,
 			directPackageIds: [],
@@ -403,7 +398,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.Equal("transitive", legacyConsumerEntry.GetProperty("dependencyKind").GetString());
 	}
 
-	[Fact]
+	[Test]
 	public async Task ListsPackingProjectsForSolutionInput()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -412,7 +407,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			solutionPath,
 			CreateSolutionFileContent(solutionPath, rootProjectPath),
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		this.Command = new()
 		{
 			InputPath = solutionPath,
@@ -428,7 +423,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		Assert.Contains($"Contoso.Legacy: {Path.Combine("packaging", "Legacy", "Legacy.nuproj")}", output);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ListsPackingProjectsForSlnxInput()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -479,7 +474,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 			project.DisplayName = Path.GetFileNameWithoutExtension(projectPath);
 		}
 
-		await ((ISolutionSerializer)SolutionSerializers.SlnXml).SaveAsync(solutionPath, solutionModel, TestContext.Current.CancellationToken);
+		await ((ISolutionSerializer)SolutionSerializers.SlnXml).SaveAsync(solutionPath, solutionModel, TestContext.Current!.Execution.CancellationToken);
 	}
 
 	private static async Task WriteProjectAssetsFileAsync(string projectPath, string[] directPackageIds, string[] resolvedPackageIds)
@@ -514,7 +509,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 				StringComparer.OrdinalIgnoreCase),
 		});
 
-		await File.WriteAllTextAsync(assetsFilePath, assetsFileContent, TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(assetsFilePath, assetsFileContent, TestContext.Current!.Execution.CancellationToken);
 	}
 
 	private async Task<(string RootProjectPath, string PackedProjectPath, string MultiTargetProjectPath, string NuProjPath, string DisabledPackProjectPath)> CreatePackingProjectGraphAsync(string rootDirectory)
@@ -546,7 +541,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			packedProjectPath,
 			packedProjectContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 
 		string multiTargetProjectPath = Path.Combine(multiTargetProjectDirectory, "Multi.csproj");
 		string multiTargetProjectContent = """
@@ -561,7 +556,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			multiTargetProjectPath,
 			multiTargetProjectContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 
 		string disabledPackProjectPath = Path.Combine(disabledPackProjectDirectory, "DisabledPack.csproj");
 		string disabledPackProjectContent = """
@@ -576,7 +571,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			disabledPackProjectPath,
 			disabledPackProjectContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 
 		string nuProjPath = Path.Combine(nuProjDirectory, "Legacy.nuproj");
 		string nuProjContent = """
@@ -590,7 +585,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			nuProjPath,
 			nuProjContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 
 		string rootProjectPath = Path.Combine(rootProjectDirectory, "App.csproj");
 		string rootProjectContent = $$"""
@@ -609,7 +604,7 @@ public class PackingProjectsCommandTests : CommandTestBase<PackingProjectsComman
 		await File.WriteAllTextAsync(
 			rootProjectPath,
 			rootProjectContent,
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 
 		return (rootProjectPath, packedProjectPath, multiTargetProjectPath, nuProjPath, disabledPackProjectPath);
 	}

@@ -12,21 +12,14 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 	private Project consumingProj = null!;
 	private Project packagesProps = null!;
 
-	public UpgradeCommandTests(ITestOutputHelper logger)
-		: base(logger)
-	{
-	}
-
 	public override async ValueTask InitializeAsync()
 	{
-		await base.InitializeAsync();
-
 		await this.SynthesizeAllMSBuildAssetsAsync();
 		this.consumingProj = this.MSBuild.SynthesizeVolatileProject(Path.Combine(this.StagingDirectory, "repotools.csproj"));
 		this.packagesProps = this.MSBuild.GetProject(Path.Combine(this.StagingDirectory, DirectoryPackagesPropsFileName));
 	}
 
-	[Fact]
+	[Test]
 	public async Task IncludesTransitiveDependencies()
 	{
 		this.Command = new()
@@ -41,7 +34,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		this.AssertPackageVersion("System.IO.Pipelines", "6.0.3");
 	}
 
-	[Fact]
+	[Test]
 	public async Task OnlyTransitiveDependencies()
 	{
 		// As a test sanity check, ensure the package we're updating doesn't even appear, since we're testing that we can update transitive dependencies
@@ -61,7 +54,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		this.AssertPackageVersion("System.IO.Pipelines", "6.0.3");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplodeTransitiveDependencies()
 	{
 		this.Command = new()
@@ -79,7 +72,7 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		this.AssertPackageVersion("Microsoft.VisualStudio.Validation", "17.0.53");
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplodeTransitiveDependencies_DoesNotDowngradeAnything()
 	{
 		// Introduce a downgrade issue.
@@ -99,7 +92,9 @@ public class UpgradeCommandTests : CommandTestBase<UpgradeCommand>
 		this.AssertPackageVersion("Newtonsoft.Json", "13.0.2");
 	}
 
-	[Theory, PairwiseData]
+	[Test]
+	[Arguments(false)]
+	[Arguments(true)]
 	public async Task PreserveMSBuildVersionProperties(bool preserveProperties)
 	{
 		HashSet<string> disregardVersionProperties = new(StringComparer.OrdinalIgnoreCase);

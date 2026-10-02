@@ -9,11 +9,6 @@ public abstract class CommandTestBase<TCommand> : TestBase
 	protected const string DirectoryPackagesPropsFileName = "Directory.Packages.props";
 	private TCommand? command;
 
-	protected CommandTestBase(ITestOutputHelper logger)
-		: base(logger)
-	{
-	}
-
 	protected TCommand? Command
 	{
 		get => this.command;
@@ -28,7 +23,7 @@ public abstract class CommandTestBase<TCommand> : TestBase
 		}
 	}
 
-	public override ValueTask DisposeAsync()
+	public override ValueTask CleanupAsync()
 	{
 		if (this.Command is not null)
 		{
@@ -36,7 +31,7 @@ public abstract class CommandTestBase<TCommand> : TestBase
 			this.Command.Dispose();
 		}
 
-		return base.DisposeAsync();
+		return base.CleanupAsync();
 	}
 
 	protected virtual async Task ExecuteCommandAsync()
