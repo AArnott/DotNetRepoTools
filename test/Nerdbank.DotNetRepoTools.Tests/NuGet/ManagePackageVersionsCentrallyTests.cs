@@ -10,18 +10,12 @@ public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackage
 {
 	private const ProjectLoadSettings DefaultProjectLoadSettings = ProjectLoadSettings.IgnoreMissingImports | ProjectLoadSettings.IgnoreInvalidImports;
 
-	public ManagePackageVersionsCentrallyTests(ITestOutputHelper logger)
-		: base(logger)
-	{
-	}
-
 	public override async ValueTask InitializeAsync()
 	{
-		await base.InitializeAsync();
 		await this.PlaceAssetsAsync("NonCPVM");
 	}
 
-	[Fact]
+	[Test]
 	public async Task PathDoesNotExist()
 	{
 		this.Command = new()
@@ -34,7 +28,7 @@ public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackage
 		Assert.NotEqual(0, this.Command.ExitCode);
 	}
 
-	[Fact]
+	[Test]
 	public async Task MigrateOneProject()
 	{
 		this.Command = new()
@@ -54,7 +48,7 @@ public class ManagePackageVersionsCentrallyTests : CommandTestBase<ManagePackage
 		this.AssertPackageVersionItemsAreUsed(projectWithVersionNumbers);
 	}
 
-	[Fact]
+	[Test]
 	public async Task MigrateWholeRepo()
 	{
 		this.Command = new()

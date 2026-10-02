@@ -9,15 +9,10 @@ using Microsoft.VisualStudio.SolutionPersistence;
 using Microsoft.VisualStudio.SolutionPersistence.Model;
 using Microsoft.VisualStudio.SolutionPersistence.Serializer;
 
-[Collection(nameof(CurrentDirectorySensitiveTestCollection))]
+[NotInParallel("CurrentDirectorySensitive")]
 public class GraphCommandTests : CommandTestBase<GraphCommand>
 {
-	public GraphCommandTests(ITestOutputHelper logger)
-		: base(logger)
-	{
-	}
-
-	[Fact]
+	[Test]
 	public async Task WritesDgmlForProjectInput()
 	{
 		(string projectPath, _) = await this.CreateProjectGraphAsync();
@@ -40,7 +35,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Contains("Wrote 2 node(s) and 1 edge(s)", ((StringWriter)this.Command.Out).ToString());
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesMermaidForProjectInput()
 	{
 		(string projectPath, _) = await this.CreateProjectGraphAsync();
@@ -55,7 +50,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		await this.ExecuteCommandAsync();
 
 		Assert.Equal(0, this.Command.ExitCode);
-		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current!.Execution.CancellationToken);
 		Assert.StartsWith("flowchart ", mermaid, StringComparison.Ordinal);
 		Assert.Contains("[\"App.csproj\"]", mermaid);
 		Assert.Contains("[\"Lib.csproj\"]", mermaid);
@@ -63,7 +58,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Contains("Wrote 2 node(s) and 1 edge(s)", ((StringWriter)this.Command.Out).ToString());
 	}
 
-	[Fact]
+	[Test]
 	public async Task InfersMermaidFormatFromOutputExtensionWhenFormatOptionOmitted()
 	{
 		(string projectPath, _) = await this.CreateProjectGraphAsync();
@@ -77,12 +72,12 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		await this.ExecuteCommandAsync();
 
 		Assert.Equal(0, this.Command.ExitCode);
-		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current!.Execution.CancellationToken);
 		Assert.StartsWith("flowchart ", mermaid, StringComparison.Ordinal);
 		Assert.Contains("[\"App.csproj\"]", mermaid);
 	}
 
-	[Fact]
+	[Test]
 	public async Task ExplicitFormatOverridesOutputExtension()
 	{
 		(string projectPath, _) = await this.CreateProjectGraphAsync();
@@ -98,12 +93,12 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		await this.ExecuteCommandAsync();
 
 		Assert.Equal(0, this.Command.ExitCode);
-		string content = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		string content = await File.ReadAllTextAsync(outputPath, TestContext.Current!.Execution.CancellationToken);
 		Assert.StartsWith("flowchart ", content, StringComparison.Ordinal);
 		Assert.DoesNotContain("<DirectedGraph", content);
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDgmlForSolutionInput()
 	{
 		(string projectPath, string referencedProjectPath) = await this.CreateProjectGraphAsync();
@@ -111,7 +106,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		await File.WriteAllTextAsync(
 			solutionPath,
 			CreateSolutionFileContent(solutionPath, projectPath, referencedProjectPath),
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		string outputPath = Path.Combine(this.StagingDirectory, "solution.dgml");
 		this.Command = new()
 		{
@@ -131,7 +126,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Equal(GetEmittedPath(solutionPath, referencedProjectPath), GetNodePathById(document, GetNodeIdByPath(document, referencedProjectPath, solutionPath)));
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDeterministicDgmlWhenSolutionProjectOrderChanges()
 	{
 		(string projectPath, string referencedProjectPath) = await this.CreateProjectGraphAsync();
@@ -140,11 +135,11 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		await File.WriteAllTextAsync(
 			firstSolutionPath,
 			CreateSolutionFileContent(firstSolutionPath, projectPath, referencedProjectPath, reverseProjectOrder: false),
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		await File.WriteAllTextAsync(
 			secondSolutionPath,
 			CreateSolutionFileContent(secondSolutionPath, projectPath, referencedProjectPath, reverseProjectOrder: true),
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 
 		string firstOutputPath = Path.Combine(this.StagingDirectory, "RepoA.dgml");
 		this.Command = new()
@@ -167,11 +162,11 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Equal(0, this.Command.ExitCode);
 
 		Assert.Equal(
-			await File.ReadAllTextAsync(firstOutputPath, TestContext.Current.CancellationToken),
-			await File.ReadAllTextAsync(secondOutputPath, TestContext.Current.CancellationToken));
+			await File.ReadAllTextAsync(firstOutputPath, TestContext.Current!.Execution.CancellationToken),
+			await File.ReadAllTextAsync(secondOutputPath, TestContext.Current!.Execution.CancellationToken));
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDgmlWithStableNodeIdsAcrossDifferentAbsoluteRoots()
 	{
 		string firstRoot = Path.Combine(this.StagingDirectory, "first-root");
@@ -215,7 +210,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Equal(GetNodeIdByPath(firstDocument, firstReferencedProjectPath, firstProjectPath), GetNodeIdByPath(secondDocument, secondReferencedProjectPath, secondProjectPath));
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDgmlForProjectInput_OmitsExcludedProjectReferenceUsingWorkingDirectoryRelativePath()
 	{
 		(string projectPath, string referencedProjectPath) = await this.CreateProjectGraphAsync();
@@ -251,7 +246,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Contains("Wrote 1 node(s) and 0 edge(s)", ((StringWriter)this.Command.Out).ToString());
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDgmlForSolutionInput_OmitsExcludedProjectsUsingAbsoluteAndWorkingDirectoryRelativePaths()
 	{
 		(string projectPath, string referencedProjectPath) = await this.CreateProjectGraphAsync();
@@ -259,7 +254,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		await File.WriteAllTextAsync(
 			solutionPath,
 			CreateSolutionFileContent(solutionPath, projectPath, referencedProjectPath),
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		string outputPath = Path.Combine(this.StagingDirectory, "solution.dgml");
 		string originalCurrentDirectory = Environment.CurrentDirectory;
 		string workingDirectory = Path.Combine(this.StagingDirectory, "cwd");
@@ -290,7 +285,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Contains("Wrote 0 node(s) and 0 edge(s)", ((StringWriter)this.Command.Out).ToString());
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDgmlForProjectInput_OmitsProjectsMatchingExcludeGlobButNotSiblingPath()
 	{
 		(string projectPath, string excludedProjectPath, string includedProjectPath) = await this.CreateProjectGraphWithSimilarPrefixPathsAsync();
@@ -326,7 +321,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, excludedProjectPath));
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDgmlForProjectInput_OmitsProjectsMatchingAbsoluteRootedExcludeGlob()
 	{
 		(string projectPath, string referencedProjectPath) = await this.CreateProjectGraphAsync();
@@ -350,7 +345,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(emittedPathBaseDirectory, referencedProjectPath));
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDgmlForProjectInput_OmitsProjectsMatchingPrefixAgnosticExcludeGlob()
 	{
 		string projectRoot = Path.Combine(this.StagingDirectory, "project-root");
@@ -386,7 +381,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.DoesNotContain(document.Root.Element(ns + "Nodes")!.Elements(ns + "Node"), node => (string?)node.Attribute("Path") == GetEmittedPath(projectPath, referencedProjectPath));
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDgmlForProjectInput_GroupsProjectsUsingAbsoluteAndWorkingDirectoryRelativePaths()
 	{
 		(string projectPath, string parentGroupPath, string childGroupPath, string siblingProjectPath, string nestedProjectPath, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
@@ -435,7 +430,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, ungroupedProjectPath));
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesGroupContainersInsteadOfSlnxExplicitProjectsContainerWhenGroupsSpecified()
 	{
 		(string projectPath, string parentGroupPath, _, _, _, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
@@ -466,7 +461,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, ungroupedProjectPath));
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDgmlForProjectInput_DoesNotCreateEmptyGroupContainers()
 	{
 		(string projectPath, string parentGroupPath, _, string siblingProjectPath, string nestedProjectPath, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
@@ -500,7 +495,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.DoesNotContain(containsLinks, link => GetNodePathById(document, (string)link.Attribute("Target")!) == GetEmittedPath(emittedPathBaseDirectory, ungroupedProjectPath));
 	}
 
-	[Fact]
+	[Test]
 	public void CreateCommand_DefinesExcludeOptionAliasAndMultipleArguments()
 	{
 		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -510,7 +505,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.True(excludeOption.AllowMultipleArgumentsPerToken);
 	}
 
-	[Fact]
+	[Test]
 	public void CreateCommand_DefinesFormatOptionAlias()
 	{
 		MethodInfo createCommandMethod = typeof(GraphCommand).GetMethod("CreateCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -519,7 +514,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.Contains("-f", formatOption.Aliases);
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesMermaidForProjectInput_GroupsProjectsAndHighlights()
 	{
 		(string projectPath, string parentGroupPath, string childGroupPath, string siblingProjectPath, string nestedProjectPath, string ungroupedProjectPath) = await this.CreateProjectGraphWithGroupingPathsAsync();
@@ -552,7 +547,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		}
 
 		Assert.Equal(0, this.Command.ExitCode);
-		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current!.Execution.CancellationToken);
 		Assert.StartsWith("flowchart ", mermaid, StringComparison.Ordinal);
 		Assert.Contains("subgraph", mermaid);
 		Assert.Contains("[\"Copilot\"]", mermaid);
@@ -568,7 +563,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Assert.DoesNotContain("Shared.csproj\"] highlight", mermaid);
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesMermaidUsingRepoRelativePathsWhenGitRepoContainsProject()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -585,13 +580,13 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		await this.ExecuteCommandAsync();
 
 		Assert.Equal(0, this.Command.ExitCode);
-		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current.CancellationToken);
+		string mermaid = await File.ReadAllTextAsync(outputPath, TestContext.Current!.Execution.CancellationToken);
 		Assert.DoesNotContain(repoRoot, mermaid, StringComparison.OrdinalIgnoreCase);
 		Assert.Contains("[\"App.csproj\"]", mermaid);
 		Assert.Contains("[\"Lib.csproj\"]", mermaid);
 	}
 
-	[Fact]
+	[Test]
 	public async Task WritesDgmlUsingRepoRelativePathsWhenGitRepoContainsProject()
 	{
 		string repoRoot = Path.Combine(this.StagingDirectory, "repo");
@@ -656,7 +651,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 			project.DisplayName = Path.GetFileNameWithoutExtension(projectPath);
 		}
 
-		await ((ISolutionSerializer)SolutionSerializers.SlnXml).SaveAsync(solutionPath, solutionModel, TestContext.Current.CancellationToken);
+		await ((ISolutionSerializer)SolutionSerializers.SlnXml).SaveAsync(solutionPath, solutionModel, TestContext.Current!.Execution.CancellationToken);
 	}
 
 	private static string? GetNodePathById(XDocument document, string nodeId)
@@ -752,7 +747,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 			  </PropertyGroup>
 			</Project>
 			""";
-		await File.WriteAllTextAsync(referencedProjectPath, referencedProjectContent, TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(referencedProjectPath, referencedProjectContent, TestContext.Current!.Execution.CancellationToken);
 
 		string projectPath = Path.Combine(appDirectory, "App.csproj");
 		string projectContent = """
@@ -765,7 +760,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 			  </ItemGroup>
 			</Project>
 			""";
-		await File.WriteAllTextAsync(projectPath, projectContent, TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(projectPath, projectContent, TestContext.Current!.Execution.CancellationToken);
 
 		return (projectPath, referencedProjectPath);
 	}
@@ -781,10 +776,10 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Directory.CreateDirectory(includedDirectory);
 
 		string excludedProjectPath = Path.Combine(excludedDirectory, "Excluded.csproj");
-		await File.WriteAllTextAsync(excludedProjectPath, CreateLibraryProjectContent(), TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(excludedProjectPath, CreateLibraryProjectContent(), TestContext.Current!.Execution.CancellationToken);
 
 		string includedProjectPath = Path.Combine(includedDirectory, "Included.csproj");
-		await File.WriteAllTextAsync(includedProjectPath, CreateLibraryProjectContent(), TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(includedProjectPath, CreateLibraryProjectContent(), TestContext.Current!.Execution.CancellationToken);
 
 		string projectPath = Path.Combine(appDirectory, "App.csproj");
 		string projectContent = $$"""
@@ -798,7 +793,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 			  </ItemGroup>
 			</Project>
 			""";
-		await File.WriteAllTextAsync(projectPath, projectContent, TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(projectPath, projectContent, TestContext.Current!.Execution.CancellationToken);
 
 		return (projectPath, excludedProjectPath, includedProjectPath);
 	}
@@ -817,13 +812,13 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		Directory.CreateDirectory(ungroupedDirectory);
 
 		string siblingProjectPath = Path.Combine(siblingDirectory, "Shared.csproj");
-		await File.WriteAllTextAsync(siblingProjectPath, CreateLibraryProjectContent(), TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(siblingProjectPath, CreateLibraryProjectContent(), TestContext.Current!.Execution.CancellationToken);
 
 		string nestedProjectPath = Path.Combine(childGroupPath, "Tests.csproj");
-		await File.WriteAllTextAsync(nestedProjectPath, CreateLibraryProjectContent(), TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(nestedProjectPath, CreateLibraryProjectContent(), TestContext.Current!.Execution.CancellationToken);
 
 		string ungroupedProjectPath = Path.Combine(ungroupedDirectory, "Other.csproj");
-		await File.WriteAllTextAsync(ungroupedProjectPath, CreateLibraryProjectContent(), TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(ungroupedProjectPath, CreateLibraryProjectContent(), TestContext.Current!.Execution.CancellationToken);
 
 		string projectPath = Path.Combine(appDirectory, "App.csproj");
 		string projectContent = $$"""
@@ -838,7 +833,7 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 			  </ItemGroup>
 			</Project>
 			""";
-		await File.WriteAllTextAsync(projectPath, projectContent, TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(projectPath, projectContent, TestContext.Current!.Execution.CancellationToken);
 
 		return (projectPath, parentGroupPath, childGroupPath, siblingProjectPath, nestedProjectPath, ungroupedProjectPath);
 	}

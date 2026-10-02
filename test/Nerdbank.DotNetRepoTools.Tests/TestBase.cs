@@ -4,7 +4,7 @@
 using System.Reflection;
 using Microsoft.Build.Evaluation;
 
-public abstract class TestBase : IAsyncLifetime
+public abstract class TestBase
 {
 	private const string AssetsPrefix = "Assets/";
 
@@ -13,27 +13,27 @@ public abstract class TestBase : IAsyncLifetime
 		MSBuild.MSBuildLocator.EnsureLoaded();
 	}
 
-	public TestBase(ITestOutputHelper logger)
+	protected TestBase()
 	{
-		this.Logger = logger;
 		this.StagingDirectory = Path.Combine(Path.GetTempPath(), "test_" + Path.GetRandomFileName());
 		this.TempFiles.Add(this.StagingDirectory);
 	}
 
 	public string StagingDirectory { get; }
 
-	public ITestOutputHelper Logger { get; }
+	public MSBuild MSBuild { get; } = new();
 
-	internal MSBuild MSBuild { get; } = new();
+	public TempFileCollection TempFiles { get; } = new();
 
-	internal TempFileCollection TempFiles { get; } = new();
+	[Before(TUnit.Core.HookType.Test)]
+	public ValueTask BeforeTestAsync() => this.InitializeAsync();
 
-	public virtual ValueTask InitializeAsync()
-	{
-		return ValueTask.CompletedTask;
-	}
+	[After(TUnit.Core.HookType.Test)]
+	public ValueTask AfterTestAsync() => this.CleanupAsync();
 
-	public virtual ValueTask DisposeAsync()
+	public virtual ValueTask InitializeAsync() => ValueTask.CompletedTask;
+
+	public virtual ValueTask CleanupAsync()
 	{
 		this.MSBuild.Dispose();
 		this.TempFiles.Dispose();
@@ -42,7 +42,7 @@ public abstract class TestBase : IAsyncLifetime
 
 	internal static Stream GetAsset(string assetName)
 	{
-		return Assembly.GetExecutingAssembly().GetManifestResourceStream(TransformAssetNameToStreamName(assetName))
+		return System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream(TransformAssetNameToStreamName(assetName))
 			?? throw new ArgumentException($"No resource named {assetName} found under the Assets directory of the test project.");
 	}
 
@@ -65,14 +65,14 @@ public abstract class TestBase : IAsyncLifetime
 	{
 		if (commandOutput.ToString() is { Length: > 0 } output)
 		{
-			this.Logger.WriteLine("Command STDOUT:");
-			this.Logger.WriteLine(output);
+			TestContext.Current!.Output.WriteLine("Command STDOUT:");
+			TestContext.Current.Output.WriteLine(output);
 		}
 
 		if (commandError.ToString() is { Length: > 0 } error)
 		{
-			this.Logger.WriteLine("Command STDERR:");
-			this.Logger.WriteLine(error);
+			TestContext.Current!.Output.WriteLine("Command STDERR:");
+			TestContext.Current.Output.WriteLine(error);
 		}
 	}
 
@@ -83,7 +83,7 @@ public abstract class TestBase : IAsyncLifetime
 
 	protected async Task SynthesizeAllMSBuildAssetsAsync()
 	{
-		foreach (string streamName in Assembly.GetExecutingAssembly().GetManifestResourceNames())
+		foreach (string streamName in System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceNames())
 		{
 			if (streamName.StartsWith(AssetsPrefix, StringComparison.Ordinal))
 			{
@@ -133,7 +133,7 @@ public abstract class TestBase : IAsyncLifetime
 		baseDirectory ??= this.StagingDirectory;
 
 		string streamNamePrefix = TransformAssetNameToStreamName(assetSubDirectory);
-		foreach (string embeddedStreamName in Assembly.GetExecutingAssembly().GetManifestResourceNames())
+		foreach (string embeddedStreamName in System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceNames())
 		{
 			if (!embeddedStreamName.StartsWith(streamNamePrefix, StringComparison.Ordinal))
 			{
@@ -147,7 +147,7 @@ public abstract class TestBase : IAsyncLifetime
 				Directory.CreateDirectory(targetDirectory);
 			}
 
-			using Stream assetStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(embeddedStreamName)!;
+			using Stream assetStream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream(embeddedStreamName)!;
 			using FileStream targetFile = File.Create(targetFilePath);
 			this.TempFiles.Add(targetFilePath);
 			await assetStream.CopyToAsync(targetFile, cancellationToken);
@@ -158,11 +158,11 @@ public abstract class TestBase : IAsyncLifetime
 
 	protected void LogFileContent(string path)
 	{
-		this.Logger.WriteLine($"Content of file: {path}");
-		this.Logger.WriteLine("-----------------");
-		this.Logger.WriteLine(File.ReadAllText(path));
-		this.Logger.WriteLine("-----------------");
-		this.Logger.WriteLine(string.Empty);
+		TestContext.Current!.Output.WriteLine($"Content of file: {path}");
+		TestContext.Current.Output.WriteLine("-----------------");
+		TestContext.Current.Output.WriteLine(File.ReadAllText(path));
+		TestContext.Current.Output.WriteLine("-----------------");
+		TestContext.Current.Output.WriteLine(string.Empty);
 	}
 
 	private static string TransformAssetNameToStreamName(string assetName) => $"{AssetsPrefix}{assetName.Replace('\\', '/')}";

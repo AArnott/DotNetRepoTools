@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.Build.Traversal">
+  <ItemGroup>
+    <ProjectReference Include="**\*.csproj" Exclude="**\Assets\**\*.csproj" Publish="false" />
+  </ItemGroup>
+</Project>

@@ -10,24 +10,17 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 {
 	private Project packagesProps = null!;
 
-	public ReconcileVersionsCommandTests(ITestOutputHelper logger)
-		: base(logger)
-	{
-	}
-
 	public override async ValueTask InitializeAsync()
 	{
-		await base.InitializeAsync();
-
 		await this.SynthesizeAllMSBuildAssetsAsync();
 		await File.WriteAllTextAsync(
 			Path.Combine(this.StagingDirectory, "Project.csproj"),
 			"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>netstandard2.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include=\"Nerdbank.Streams\" /></ItemGroup></Project>",
-			TestContext.Current.CancellationToken);
+			TestContext.Current!.Execution.CancellationToken);
 		this.packagesProps = this.MSBuild.GetProject(Path.Combine(this.StagingDirectory, DirectoryPackagesPropsFileName));
 	}
 
-	[Fact]
+	[Test]
 	public async Task FixesDowngradeIssues()
 	{
 		// Introduce a downgrade issue.
@@ -44,7 +37,7 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 		Assert.False(Directory.Exists(Path.Combine(this.StagingDirectory, "nuget.frameworks")));
 	}
 
-	[Fact]
+	[Test]
 	public async Task DiscoversTargetFrameworks()
 	{
 		string projectsDirectory = Path.Combine(this.StagingDirectory, "Projects");
@@ -58,7 +51,7 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 				"  </PropertyGroup>",
 				"</Project>",
 			]);
-		await File.WriteAllTextAsync(Path.Combine(projectsDirectory, "SingleTarget.csproj"), singleTargetProject, TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(Path.Combine(projectsDirectory, "SingleTarget.csproj"), singleTargetProject, TestContext.Current!.Execution.CancellationToken);
 
 		string multiTargetProject = string.Join(
 			Environment.NewLine,
@@ -70,7 +63,7 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 				"  </PropertyGroup>",
 				"</Project>",
 			]);
-		await File.WriteAllTextAsync(Path.Combine(projectsDirectory, "MultiTarget.csproj"), multiTargetProject, TestContext.Current.CancellationToken);
+		await File.WriteAllTextAsync(Path.Combine(projectsDirectory, "MultiTarget.csproj"), multiTargetProject, TestContext.Current!.Execution.CancellationToken);
 
 		// Introduce a downgrade issue that must be corrected for every discovered framework.
 		this.packagesProps.GetItemsByEvaluatedInclude("Nerdbank.Streams").Single().SetMetadataValue("Version", "2.9.112");
@@ -84,7 +77,7 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 		AssertPackageVersion(this.packagesProps, "System.IO.Pipelines", "6.0.3");
 	}
 
-	[Fact]
+	[Test]
 	public async Task UsesExplicitTargetFrameworks()
 	{
 		// Introduce a downgrade issue.
@@ -100,7 +93,7 @@ public class ReconcileVersionsCommandTests : CommandTestBase<ReconcileVersionsCo
 		AssertPackageVersion(this.packagesProps, "System.IO.Pipelines", "6.0.3");
 	}
 
-	[Fact]
+	[Test]
 	public async Task DoesNotReportSyntheticCompatibilityErrors()
 	{
 		this.packagesProps.AddItem("PackageVersion", "Cake.Core").Single().SetMetadataValue("Version", "6.2.0");
