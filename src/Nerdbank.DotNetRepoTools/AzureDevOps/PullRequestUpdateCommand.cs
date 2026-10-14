@@ -153,7 +153,7 @@ internal class PullRequestUpdateCommand : PullRequestModifyingCommandBase
 					return;
 				}
 
-				body["lastMergeSourceCommit"] = new JsonObject { ["commitId"] = currentPRData["lastMergeSourceCommit"]!["commitId"]!.GetValue<string>() };
+				body["lastMergeSourceCommit"] = new JsonObject { ["commitId"] = (currentPRData["lastMergeSourceCommit"]!)["commitId"]!.GetValue<string>() };
 			}
 		}
 
