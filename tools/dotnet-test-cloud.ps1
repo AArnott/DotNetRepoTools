@@ -72,6 +72,7 @@ if ($isMTP) {
         ,'--crash-report-if-supported'
     )
     $mtpArgs = @(
+        ,'--treenode-filter=/*/*/*/*[TestCategory!=FailsInCloudTest]'
         ,'--diagnostic'
         ,'--diagnostic-output-directory',$testLogs
         ,'--diagnostic-verbosity','Information'
