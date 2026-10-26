@@ -29,6 +29,7 @@
 			"matchDatasources": ["dotnet-version", "docker"],
 			"matchDepNames": ["dotnet-sdk", "mcr.microsoft.com/dotnet/sdk"],
 			"groupName": "Dockerfile and global.json updates"
+<<<<<<< HEAD
 		},
 		{
 			"matchPackageNames": ["*"],
@@ -58,6 +59,8 @@
 			"matchJsonata": ["sharedVariableName='MicrosoftBuildVersionForNet9'"],
 			"matchUpdateTypes": ["major", "minor"],
 			"enabled": false
+=======
+>>>>>>> 5e03c63c3ddcb140119fc18c356a8e303eb30a8b
 		}
 	]
 }
