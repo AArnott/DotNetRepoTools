@@ -1,11 +1,9 @@
 {
-<<<<<<< HEAD
-=======
 	"metadata": [
 		{
 			"src": [
 				{
-					"src": "../src/Library",
+					"src": "../src/Nerdbank.DotNetRepoTools",
 					"files": [
 						"**/*.csproj"
 					]
@@ -17,7 +15,6 @@
 			}
 		}
 	],
->>>>>>> 5e03c63c3ddcb140119fc18c356a8e303eb30a8b
 	"build": {
 		"content": [
 			{

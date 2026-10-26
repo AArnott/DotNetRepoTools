@@ -171,13 +171,11 @@ csharp_prefer_braces = true:silent
 # SA1130: Use lambda syntax
 dotnet_diagnostic.SA1130.severity = silent
 
-<<<<<<< HEAD
 # SA1600: Elements should be documented
 dotnet_diagnostic.SA1600.severity = silent
-=======
+
 # SA1504: All accessors should be single-line or multi-line
 dotnet_diagnostic.SA1504.severity = silent
->>>>>>> 5e03c63c3ddcb140119fc18c356a8e303eb30a8b
 
 # IDE1006: Naming Styles - StyleCop handles these for us
 dotnet_diagnostic.IDE1006.severity = none
