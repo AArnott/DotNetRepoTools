@@ -614,19 +614,26 @@ public class GraphCommandTests : CommandTestBase<GraphCommand>
 		string solutionDirectory = Path.GetDirectoryName(solutionPath)!;
 		string appPathFromSolution = Path.GetRelativePath(solutionDirectory, projectPath);
 		string libPathFromSolution = Path.GetRelativePath(solutionDirectory, referencedProjectPath);
-		string[] projectEntries = reverseProjectOrder
-			? [
+		string[] projectEntries;
+		if (reverseProjectOrder)
+		{
+			projectEntries = [
 				$"Project(\"{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}\") = \"Lib\", \"{libPathFromSolution}\", \"{{22222222-2222-2222-2222-222222222222}}\"",
 				"EndProject",
 				$"Project(\"{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}\") = \"App\", \"{appPathFromSolution}\", \"{{11111111-1111-1111-1111-111111111111}}\"",
 				"EndProject",
-			]
-			: [
+			];
+		}
+		else
+		{
+			projectEntries = [
 				$"Project(\"{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}\") = \"App\", \"{appPathFromSolution}\", \"{{11111111-1111-1111-1111-111111111111}}\"",
 				"EndProject",
 				$"Project(\"{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}\") = \"Lib\", \"{libPathFromSolution}\", \"{{22222222-2222-2222-2222-222222222222}}\"",
 				"EndProject",
 			];
+		}
+
 		return $$"""
 			Microsoft Visual Studio Solution File, Format Version 12.00
 			# Visual Studio Version 17

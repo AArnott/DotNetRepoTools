@@ -61,9 +61,11 @@ public abstract class AzureDevOpsCommandBase : CommandBase
 			}
 
 			Uri collectionUri = new(account);
-			this.Account = collectionUri.Host == "dev.azure.com" ? collectionUri.PathAndQuery.TrimStart('/').TrimEnd('/') :
-				collectionUri.Host.EndsWith(".visualstudio.com") ? collectionUri.Host.Substring(0, collectionUri.Host.IndexOf('.')) :
-				throw new Exception($"Unrecognized collection URI pattern: {collectionUri.AbsoluteUri}");
+			this.Account = collectionUri.Host == "dev.azure.com"
+				? collectionUri.PathAndQuery.TrimStart('/').TrimEnd('/')
+				: collectionUri.Host.EndsWith(".visualstudio.com")
+					? collectionUri.Host.Substring(0, collectionUri.Host.IndexOf('.'))
+					: throw new Exception($"Unrecognized collection URI pattern: {collectionUri.AbsoluteUri}");
 		}
 		else
 		{
