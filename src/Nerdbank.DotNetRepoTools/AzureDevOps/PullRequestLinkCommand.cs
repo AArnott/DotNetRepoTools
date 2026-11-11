@@ -78,7 +78,7 @@ internal class PullRequestLinkCommand : PullRequestModifyingCommandBase
 						},
 					},
 				},
-			];
+		];
 
 		HttpRequestMessage request = new(HttpMethod.Patch, $"{this.CollectionUri}{this.Project}/_apis/wit/workitems/{this.WorkItemId}?api-version=7.1")
 		{

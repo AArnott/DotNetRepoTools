@@ -64,7 +64,7 @@ internal class WorkItemCreateCommand : WorkItemCommandBase
 	{
 		List<JsonPatch> patches = [
 			new() { Path = "/fields/System.Title", Value = this.Title },
-			];
+		];
 
 		if (this.AreaPath is not null)
 		{
