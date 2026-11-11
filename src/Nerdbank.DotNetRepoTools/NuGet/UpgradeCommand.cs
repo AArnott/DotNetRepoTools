@@ -135,8 +135,8 @@ public class UpgradeCommand : MSBuildCommandBase
 			.ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 		foreach (GraphItem<RemoteResolveResult>? item in restoreGraphs.SelectMany(graph => graph.Flattened).Where(i => i.Key.Type == LibraryType.Package))
 		{
-			string version = downgrades.TryGetValue(item.Key.Name, out DowngradeResult<RemoteResolveResult>? downgrade)
-				? downgrade.DowngradedFrom.Item.Key.Version.ToFullString()
+			string version = downgrades.TryGetValue(item.Key.Name, out DowngradeResult<RemoteResolveResult>? downgrade) && downgrade.DowngradedFrom.Item is { } downgradedFrom
+				? downgradedFrom.Key.Version.ToFullString()
 				: item.Key.Version.ToFullString();
 
 			if (nuget.SetPackageVersion(item.Key.Name, version, addIfMissing: this.Explode, allowDowngrade: false, disregardVersionProperties: this.DisregardVersionProperties))
