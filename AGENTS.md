@@ -14,7 +14,7 @@
 ## Testing
 
 See the [testing skill](.agents/skills/testing/SKILL.md) for TUnit/Microsoft.Testing.Platform commands and `--treenode-filter` syntax.
-The test project is `test/Nerdbank.DotNetRepoTools.Tests/Nerdbank.DotNetRepoTools.Tests.csproj`, targeting `net8.0`, `net9.0`, and `net10.0`.
+The test project is `test/Nerdbank.DotNetRepoTools.Tests/Nerdbank.DotNetRepoTools.Tests.csproj`, targeting `net10.0`.
 
 ## Coding style
 
