@@ -17,7 +17,7 @@
     <PackageVersion Include="NuGet.Commands" Version="$(NuGetVersion)" />
     <PackageVersion Include="NuGet.Frameworks" Version="$(NuGetVersion)" />
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
-    <PackageVersion Include="System.CommandLine" Version="2.0.15" />
+    <PackageVersion Include="System.CommandLine" Version="3.0.0" />
   </ItemGroup>
   <ItemGroup Label="Library.Template">
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
